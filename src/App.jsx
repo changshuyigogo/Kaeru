@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
+import ReceiptScanner from './receiptScanner.js';
 
 /* ------------------------------------------------------------------
    Kaeru　日本退稅小幫手 / 免税リファンドヘルパー
@@ -114,6 +115,27 @@ const T = {
       '拆開包裝沒關係，衣服穿過也沒關係，只要查驗時東西還在、拿得出來就能退。真的吃掉、用掉，東西不在了，那張收據才會整張失效。',
     photo: '收據照片',
     takePhoto: '拍照或選檔',
+    photoSheetSub: '照片只存在這台裝置上，不會上傳。',
+    takePhotoOption: '拍照',
+    takePhotoHint: '開相機，對準收據拍一張',
+    chooseFromLibrary: '從相簿選',
+    libraryHint: '最多選 4 張',
+    scanDoc: '掃描文件',
+    scanDocHint: '自動抓邊框、拉正、去陰影',
+    cameraDenied: '沒有相機權限',
+    photoDenied: '沒有照片圖庫權限',
+    openSettings: '去設定開啟',
+    confirmPhoto: '確認照片',
+    retakePhoto: '重拍',
+    usePhoto: '使用',
+    useWithAmount: '使用這張並帶入金額',
+    useOnly: '使用這張',
+    toolAdjustBorder: '調整邊框',
+    toolRotate: '旋轉',
+    toolContrast: '增強對比',
+    edgeAutoOk: '邊框已自動抓好',
+    ocrAmountLabel: '從照片讀到的金額',
+    ocrHint: '可以直接帶入表單，之後仍可手動改',
     note: '備註',
     save: '儲存',
     edit: '編輯',
@@ -330,6 +352,27 @@ const T = {
       '開封や着用は問題ありません。確認時に所持していれば対象です。消費して所持していない場合のみ、そのレシート全体が対象外になります。',
     photo: 'レシート写真',
     takePhoto: '撮影または選択',
+    photoSheetSub: '写真はこの端末にだけ保存されます。アップロードはされません。',
+    takePhotoOption: '写真を撮る',
+    takePhotoHint: 'カメラを起動してレシートを撮影',
+    chooseFromLibrary: 'フォトライブラリから選ぶ',
+    libraryHint: '最大 4 枚まで選択',
+    scanDoc: '文書をスキャン',
+    scanDocHint: '枠を自動検出・補正、影も除去',
+    cameraDenied: 'カメラの権限がありません',
+    photoDenied: 'フォトライブラリの権限がありません',
+    openSettings: '設定を開く',
+    confirmPhoto: '写真を確認',
+    retakePhoto: '再撮影',
+    usePhoto: '使用',
+    useWithAmount: 'この写真を使って金額を入力',
+    useOnly: 'この写真を使う',
+    toolAdjustBorder: '枠を調整',
+    toolRotate: '回転',
+    toolContrast: 'コントラスト強化',
+    edgeAutoOk: '枠を自動検出済み',
+    ocrAmountLabel: '写真から読み取った金額',
+    ocrHint: 'そのままフォームに入力できます。後で手動修正も可能',
     note: 'メモ',
     save: '保存',
     edit: '編集',
@@ -1049,21 +1092,172 @@ function compressImage(file, maxSide = 1000, quality = 0.6) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
-        const c = document.createElement('canvas');
-        c.width = Math.max(1, Math.round(img.width * scale));
-        c.height = Math.max(1, Math.round(img.height * scale));
-        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-        resolve(c.toDataURL('image/jpeg', quality));
-      };
-      img.onerror = reject;
-      img.src = reader.result;
+      compressImageSrc(reader.result, maxSide, quality).then(resolve, reject);
     };
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+// 跟 compressImage 一樣的縮圖／壓縮邏輯，但吃任意可載入的圖片來源
+// （dataURL、blob URL、Capacitor 的 webPath...），相簿多選跟掃描結果都靠這個。
+function compressImageSrc(src, maxSide = 1000, quality = 0.6) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.width * scale));
+      c.height = Math.max(1, Math.round(img.height * scale));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = reject;
+    img.crossOrigin = 'anonymous';
+    img.src = src;
+  });
+}
+
+// 4 角透視校正：把來源影像中一個（可能歪斜的）四邊形裁出來拉正成矩形。
+// 做法是把四邊形切成兩個三角形，各自求出對應輸出三角形的仿射矩陣，
+// clip 之後用該矩陣畫整張圖——標準的「canvas 三角貼圖」技巧，不需要 WebGL。
+function solveAffine(src3, dst3) {
+  // 解兩個共用係數矩陣的 3x3 線性方程式（x 分量、y 分量分別求）
+  const [[x0, y0], [x1, y1], [x2, y2]] = src3;
+  const det =
+    x0 * (y1 - y2) - y0 * (x1 - x2) + (x1 * y2 - x2 * y1);
+  if (Math.abs(det) < 1e-6) return null;
+  const solveFor = (X0, X1, X2) => {
+    // Cramer's rule：a*x+c*y+e=X 對三個點列聯立
+    const a =
+      (X0 * (y1 - y2) - y0 * (X1 - X2) + (X1 * y2 - X2 * y1)) / det;
+    const c =
+      (x0 * (X1 - X2) - X0 * (x1 - x2) + (x1 * X2 - x2 * X1)) / det;
+    const e =
+      (x0 * (y1 * X2 - y2 * X1) -
+        y0 * (x1 * X2 - x2 * X1) +
+        X0 * (x1 * y2 - x2 * y1)) /
+      det;
+    return [a, c, e];
+  };
+  const [a, c, e] = solveFor(dst3[0][0], dst3[1][0], dst3[2][0]);
+  const [b, d, f] = solveFor(dst3[0][1], dst3[1][1], dst3[2][1]);
+  return [a, b, c, d, e, f];
+}
+
+function perspectiveCrop(img, corners, outW, outH) {
+  // corners: [TL, TR, BR, BL]，每個是 {x,y}（原圖像素座標）
+  const [TL, TR, BR, BL] = corners;
+  const c = document.createElement('canvas');
+  c.width = outW;
+  c.height = outH;
+  const ctx = c.getContext('2d');
+  const tris = [
+    { src: [TL, TR, BL], dst: [[0, 0], [outW, 0], [0, outH]] },
+    { src: [TR, BR, BL], dst: [[outW, 0], [outW, outH], [0, outH]] },
+  ];
+  for (const tri of tris) {
+    const m = solveAffine(
+      tri.src.map((p) => [p.x, p.y]),
+      tri.dst,
+    );
+    if (!m) continue;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(tri.dst[0][0], tri.dst[0][1]);
+    ctx.lineTo(tri.dst[1][0], tri.dst[1][1]);
+    ctx.lineTo(tri.dst[2][0], tri.dst[2][1]);
+    ctx.closePath();
+    ctx.clip();
+    ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
+    ctx.drawImage(img, 0, 0);
+    ctx.restore();
+  }
+  return c;
+}
+
+function rotateCanvas(src, deg) {
+  if (!deg) return src;
+  const swapped = deg === 90 || deg === 270;
+  const c = document.createElement('canvas');
+  c.width = swapped ? src.height : src.width;
+  c.height = swapped ? src.width : src.height;
+  const ctx = c.getContext('2d');
+  ctx.translate(c.width / 2, c.height / 2);
+  ctx.rotate((deg * Math.PI) / 180);
+  ctx.drawImage(src, -src.width / 2, -src.height / 2);
+  return c;
+}
+
+function applyContrast(canvas, amount = 35) {
+  const ctx = canvas.getContext('2d');
+  const { width: w, height: h } = canvas;
+  const id = ctx.getImageData(0, 0, w, h);
+  const d = id.data;
+  const factor = (259 * (amount + 255)) / (255 * (259 - amount));
+  const clamp = (v) => (v < 0 ? 0 : v > 255 ? 255 : v);
+  for (let i = 0; i < d.length; i += 4) {
+    d[i] = clamp(factor * (d[i] - 128) + 128);
+    d[i + 1] = clamp(factor * (d[i + 1] - 128) + 128);
+    d[i + 2] = clamp(factor * (d[i + 2] - 128) + 128);
+  }
+  ctx.putImageData(id, 0, 0);
+  return canvas;
+}
+
+// dataURL 的 base64 長度換算實際位元組數，用來顯示「1.2 MB → 240 KB」
+function dataUrlBytes(dataUrl) {
+  if (!dataUrl) return 0;
+  const i = dataUrl.indexOf(',');
+  const b64 = i >= 0 ? dataUrl.slice(i + 1) : dataUrl;
+  const pad = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0;
+  return Math.round((b64.length * 3) / 4) - pad;
+}
+
+function formatBytes(bytes) {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
+}
+
+// 從 OCR 辨識出的原始文字，抓「N%対象 金額円」這種日本收據固定格式。
+// 找不到任何 %対象 就整個回傳 null——OCR 是省打字，不是猜答案，讀不到不要生數字。
+function parseReceiptOCR(text) {
+  if (!text) return null;
+  const norm = text.replace(/[，]/g, ',');
+  const pctRe = /(8|10)\s*%\s*(?:対象|對象)[^\d]{0,12}([\d,]{2,9})\s*円/g;
+  const found = {};
+  let m;
+  while ((m = pctRe.exec(norm))) {
+    const amt = Number(m[2].replace(/,/g, ''));
+    if (amt > 0) found[m[1]] = amt;
+  }
+  const rates = Object.keys(found);
+  if (rates.length === 0) return null;
+
+  const result = {};
+  if (rates.length >= 2) {
+    result.rate = 'mixed';
+    result.incl8 = found['8'] || null;
+    result.incl10 = found['10'] || null;
+  } else {
+    result.rate = Number(rates[0]);
+    result.incl = found[rates[0]];
+  }
+
+  const lines = norm
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const shopLine = lines.find((l) => l.length >= 2 && l.length <= 20 && !/\d/.test(l));
+  if (shopLine) result.shop = shopLine;
+
+  const dm = norm.match(/(20\d{2})[\-\/年](\d{1,2})[\-\/月](\d{1,2})/);
+  if (dm) {
+    result.date = `${dm[1]}-${String(dm[2]).padStart(2, '0')}-${String(dm[3]).padStart(2, '0')}`;
+  }
+
+  return result;
 }
 
 /* ---------------- primitives ---------------- */
@@ -1579,7 +1773,15 @@ export default function App() {
           for (const it of list.filter((i) => i.hasPhoto)) {
             try {
               const p = await window.storage.get(photoKey(it.id));
-              if (p && p.value) map[it.id] = p.value;
+              if (p && p.value) {
+                // 舊資料是單張 dataURL 字串；新格式是 JSON 陣列（最多 4 張）
+                try {
+                  const parsed = JSON.parse(p.value);
+                  map[it.id] = Array.isArray(parsed) ? parsed : [p.value];
+                } catch (e) {
+                  map[it.id] = [p.value];
+                }
+              }
             } catch (e) {}
           }
           setPhotos(map);
@@ -1653,17 +1855,19 @@ export default function App() {
     return { totalIncl, refundable, pendingCount, minDays };
   }, [tripItems, groups]);
 
-  function upsert(input, photoData) {
+  function upsert(input, photosData) {
     const item = { ...input, tripId: input.tripId || activeId };
     setItems((prev) =>
       prev.some((p) => p.id === item.id)
         ? prev.map((p) => (p.id === item.id ? item : p))
         : [item, ...prev],
     );
-    if (photoData !== undefined) {
-      if (photoData) {
-        setPhotos((p) => ({ ...p, [item.id]: photoData }));
-        window.storage.set(photoKey(item.id), photoData).catch(() => {});
+    if (photosData !== undefined) {
+      if (photosData && photosData.length) {
+        setPhotos((p) => ({ ...p, [item.id]: photosData }));
+        window.storage
+          .set(photoKey(item.id), JSON.stringify(photosData))
+          .catch(() => {});
       } else {
         setPhotos((p) => {
           const n = { ...p };
@@ -1995,10 +2199,10 @@ export default function App() {
         <EditSheet
           t={t}
           initial={editing === 'new' ? null : editing}
-          photo={editing === 'new' ? null : photos[editing.id]}
+          photos={editing === 'new' ? [] : photos[editing.id] || []}
           onClose={() => setEditing(null)}
-          onSave={(item, photoData) => {
-            upsert(item, photoData);
+          onSave={(item, photosData) => {
+            upsert(item, photosData);
             setEditing(null);
           }}
         />
@@ -2009,7 +2213,7 @@ export default function App() {
           t={t}
           item={openItem}
           group={groups.get(groupKey(openItem))}
-          photo={photos[openItem.id]}
+          photos={photos[openItem.id] || []}
           taxOf={taxOf}
           settings={settings}
           onClose={() => setOpenId(null)}
@@ -3887,7 +4091,7 @@ function TripSheet({
   );
 }
 
-function EditSheet({ t, initial, photo, onClose, onSave }) {
+function EditSheet({ t, initial, photos, onClose, onSave }) {
   const [shop, setShop] = useState(initial?.shop || '');
   const [date, setDate] = useState(initial?.date || todayStr());
   const [incl, setIncl] = useState(initial?.incl ?? '');
@@ -3905,7 +4109,10 @@ function EditSheet({ t, initial, photo, onClose, onSave }) {
   const [unpacked, setUnpacked] = useState(initial?.unpacked || false);
   const [consumed, setConsumed] = useState(initial?.consumed || false);
   const [note, setNote] = useState(initial?.note || '');
-  const [img, setImg] = useState(photo || null);
+  const [imgs, setImgs] = useState(photos || []);
+  const [photoPromptOpen, setPhotoPromptOpen] = useState(false);
+  const [photoDenied, setPhotoDenied] = useState(null); // null | 'camera' | 'photos'
+  const [confirmPhoto, setConfirmPhoto] = useState(null); // { src, fromScan } | null
   const fileRef = useRef(null);
 
   const mixed = rate === 'mixed';
@@ -3939,31 +4146,112 @@ function EditSheet({ t, initial, photo, onClose, onSave }) {
     setRate(r);
   }
 
+  const remaining = 4 - imgs.length;
+
   async function onPick(e) {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
     try {
-      setImg(await compressImage(f));
+      const src = await compressImage(f);
+      setImgs((p) => [...p, src].slice(0, 4));
     } catch (err) {}
+    e.target.value = '';
   }
 
-  async function pickPhoto() {
+  function pickPhoto() {
+    if (remaining <= 0) return;
+    setPhotoDenied(null);
     if (Capacitor.isNativePlatform()) {
-      try {
-        const shot = await Camera.getPhoto({
-          resultType: CameraResultType.DataUrl,
-          source: CameraSource.Prompt,
-          quality: 60,
-          width: 1000,
-          promptLabelHeader: t.takePhoto,
-        });
-        if (shot?.dataUrl) setImg(shot.dataUrl);
-      } catch (err) {
-        // 使用者取消選擇時 Camera.getPhoto 會 reject，忽略即可
-      }
+      setPhotoPromptOpen(true);
       return;
     }
     fileRef.current && fileRef.current.click();
+  }
+
+  function isPermissionDenied(err) {
+    // 自建的 ReceiptScanner plugin 固定 reject "permission_denied"；
+    // @capacitor/camera 官方外掛的措辭不固定（各平台文字不同），寬鬆比對關鍵字。
+    if (!err) return false;
+    const msg = String(err.message || err.code || '').toLowerCase();
+    return msg.includes('permission') || msg.includes('denied');
+  }
+
+  // 原生殼上不用系統內建的選單（樣式跟語言都套不進 app 自己的視覺語言），
+  // 改用一個自己畫的底部選單。拍照走系統相機（只拍一張，先進確認/裁切畫面）；
+  // 從相簿選走系統原生多選（PHPicker／Android 相片選擇器），選完直接壓縮加入；
+  // 掃描文件走自建的原生外掛（系統文件掃描器），第一頁進確認畫面，其餘直接加入。
+  async function openCamera() {
+    setPhotoPromptOpen(false);
+    try {
+      const shot = await Camera.getPhoto({
+        resultType: CameraResultType.DataUrl,
+        source: CameraSource.Camera,
+        quality: 80,
+      });
+      if (shot?.dataUrl) setConfirmPhoto({ src: shot.dataUrl, fromScan: false });
+    } catch (err) {
+      if (isPermissionDenied(err)) setPhotoDenied('camera');
+    }
+  }
+
+  async function openLibrary() {
+    setPhotoPromptOpen(false);
+    try {
+      const picked = await Camera.pickImages({
+        limit: Math.max(1, remaining),
+        quality: 80,
+      });
+      const files = picked?.photos || [];
+      for (const f of files.slice(0, remaining)) {
+        try {
+          const src = await compressImageSrc(f.webPath || f.path);
+          setImgs((p) => (p.length < 4 ? [...p, src] : p));
+        } catch (err) {}
+      }
+    } catch (err) {
+      if (isPermissionDenied(err)) setPhotoDenied('photos');
+    }
+  }
+
+  async function openScan() {
+    setPhotoPromptOpen(false);
+    try {
+      const res = await ReceiptScanner.scanDocument();
+      const images = res?.images || [];
+      if (!images.length) return;
+      const [first, ...rest] = images;
+      setConfirmPhoto({ src: first, fromScan: true });
+      for (const raw of rest.slice(0, remaining - 1)) {
+        try {
+          const src = await compressImageSrc(raw);
+          setImgs((p) => (p.length < 4 ? [...p, src] : p));
+        } catch (err) {}
+      }
+    } catch (err) {
+      if (isPermissionDenied(err)) setPhotoDenied('camera');
+      // 使用者取消掃描時也會 reject，忽略即可
+    }
+  }
+
+  function finishConfirm(src, parsed) {
+    setConfirmPhoto(null);
+    if (src) setImgs((p) => (p.length < 4 ? [...p, src] : p));
+    if (parsed) {
+      if (parsed.shop && !shop.trim()) setShop(parsed.shop);
+      if (parsed.date) setDate(parsed.date);
+      if (parsed.rate === 'mixed') {
+        setRate('mixed');
+        if (parsed.incl8 != null) setIncl8(String(parsed.incl8));
+        if (parsed.incl10 != null) setIncl10(String(parsed.incl10));
+      } else if (parsed.rate != null) {
+        setRate(parsed.rate);
+        setIncl(String(parsed.incl));
+      }
+    }
+  }
+
+  function removeImg(idx) {
+    setImgs((p) => p.filter((_, i) => i !== idx));
   }
 
   function save() {
@@ -4002,14 +4290,15 @@ function EditSheet({ t, initial, photo, onClose, onSave }) {
         consumed,
         note: note.trim(),
         status,
-        hasPhoto: !!img,
+        hasPhoto: !!imgs.length,
         tripId: initial?.tripId,
       },
-      img,
+      imgs,
     );
   }
 
   return (
+    <>
     <FullScreenSheet>
       <div
         className="sticky top-0 z-10 flex items-center justify-between kaeru-pad py-4"
@@ -4369,22 +4658,55 @@ function EditSheet({ t, initial, photo, onClose, onSave }) {
         )}
 
         <Field label={t.photo}>
-          {img ? (
-            <div className="relative">
-              <img
-                src={img}
-                alt=""
-                className="w-full"
-                style={{ border: `1px solid ${C.line}` }}
-              />
-              <button
-                onClick={() => setImg(null)}
-                className="absolute right-2 top-2 rounded-full p-1.5"
-                style={{ backgroundColor: C.ink, color: '#FFFFFF' }}
-              >
-                <X size={14} />
-              </button>
+          {imgs.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {imgs.map((src, i) => (
+                <div
+                  key={i}
+                  className="relative"
+                  style={{ width: '74px', height: '74px' }}
+                >
+                  <img
+                    src={src}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    style={{ border: `1px solid ${C.line}` }}
+                  />
+                  <button
+                    onClick={() => removeImg(i)}
+                    className="absolute right-1 top-1 rounded-full p-0.5"
+                    style={{ backgroundColor: C.ink, color: '#FFFFFF' }}
+                  >
+                    <X size={11} />
+                  </button>
+                </div>
+              ))}
+              {remaining > 0 && (
+                <button
+                  onClick={pickPhoto}
+                  className="flex items-center justify-center"
+                  style={{
+                    width: '74px',
+                    height: '74px',
+                    border: `1px dashed ${C.line}`,
+                    color: C.sub,
+                  }}
+                >
+                  <Plus size={18} />
+                </button>
+              )}
             </div>
+          ) : photoDenied ? (
+            <p style={{ color: C.sub, fontSize: '13px', lineHeight: 1.8 }}>
+              {photoDenied === 'camera' ? t.cameraDenied : t.photoDenied}
+              {'　'}
+              <button
+                onClick={() => ReceiptScanner.openAppSettings().catch(() => {})}
+                style={{ color: C.blueDeep, textDecoration: 'underline' }}
+              >
+                {t.openSettings}
+              </button>
+            </p>
           ) : (
             <button
               onClick={pickPhoto}
@@ -4413,6 +4735,332 @@ function EditSheet({ t, initial, photo, onClose, onSave }) {
         </Field>
       </div>
     </FullScreenSheet>
+
+    {photoPromptOpen && (
+      <BottomSheet onClose={() => setPhotoPromptOpen(false)}>
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold" style={{ fontSize: '18px' }}>
+            {t.photo}
+          </h2>
+          <button onClick={() => setPhotoPromptOpen(false)} style={{ color: C.sub }}>
+            <X size={18} />
+          </button>
+        </div>
+        <p className="mt-1.5" style={{ color: C.sub, fontSize: '11.5px' }}>
+          {t.photoSheetSub}
+        </p>
+        <div className="mt-3">
+          {[
+            { label: t.takePhotoOption, hint: t.takePhotoHint, onClick: openCamera },
+            {
+              label: t.chooseFromLibrary,
+              hint: t.libraryHint,
+              onClick: openLibrary,
+            },
+            { label: t.scanDoc, hint: t.scanDocHint, onClick: openScan },
+          ].map((opt, i) => (
+            <button
+              key={opt.label}
+              onClick={opt.onClick}
+              className="flex w-full items-center justify-between py-4 text-left"
+              style={{ borderTop: `1px solid ${i === 0 ? C.ink : C.line}` }}
+            >
+              <span>
+                <span
+                  className="block font-bold"
+                  style={{ fontSize: '15px', color: C.ink }}
+                >
+                  {opt.label}
+                </span>
+                <span className="block" style={{ fontSize: '11.5px', color: C.sub }}>
+                  {opt.hint}
+                </span>
+              </span>
+              <ChevronRight size={14} style={{ color: C.sub, flexShrink: 0 }} />
+            </button>
+          ))}
+        </div>
+        <div
+          className="mt-1 flex justify-center py-3"
+          style={{ borderTop: `1px solid ${C.ink}` }}
+        >
+          <button
+            onClick={() => setPhotoPromptOpen(false)}
+            className="font-semibold"
+            style={{ color: C.sub, fontSize: '13.5px' }}
+          >
+            {t.cancel}
+          </button>
+        </div>
+      </BottomSheet>
+    )}
+
+    {confirmPhoto && (
+      <PhotoConfirmSheet
+        t={t}
+        src={confirmPhoto.src}
+        fromScan={confirmPhoto.fromScan}
+        onRetake={() => {
+          setConfirmPhoto(null);
+          pickPhoto();
+        }}
+        onUse={finishConfirm}
+      />
+    )}
+    </>
+  );
+}
+
+// 畫面4：確認與裁切。四角把手是相對於「圖片自己實際渲染出來的那個框」
+// 的百分比座標（0~1），拖曳時用 wrapperRef 量測出來的框反推百分比，
+// 這樣不管圖片比例、螢幕大小都對得上，不用管 object-fit 的letterbox。
+function PhotoConfirmSheet({ t, src, fromScan, onRetake, onUse }) {
+  const [corners, setCorners] = useState([
+    { x: 0.04, y: 0.04 },
+    { x: 0.96, y: 0.04 },
+    { x: 0.96, y: 0.96 },
+    { x: 0.04, y: 0.96 },
+  ]);
+  const [rotation, setRotation] = useState(0);
+  const [contrastOn, setContrastOn] = useState(false);
+  const [outBytes, setOutBytes] = useState(null);
+  const [ocr, setOcr] = useState({ loading: true, parsed: null });
+  const wrapperRef = useRef(null);
+  const imgRef = useRef(null);
+  const dragIdx = useRef(null);
+  const inBytes = useMemo(() => dataUrlBytes(src), [src]);
+
+  useEffect(() => {
+    let alive = true;
+    ReceiptScanner.recognizeText({ image: src })
+      .then((res) => {
+        if (!alive) return;
+        const parsed = parseReceiptOCR(res?.text || '');
+        setOcr({ loading: false, parsed });
+      })
+      .catch(() => {
+        if (alive) setOcr({ loading: false, parsed: null });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [src]);
+
+  function buildOutput() {
+    const img = imgRef.current;
+    const natCorners = corners.map((f) => ({
+      x: f.x * img.naturalWidth,
+      y: f.y * img.naturalHeight,
+    }));
+    const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+    const [TL, TR, BR, BL] = natCorners;
+    let w = Math.round((dist(TL, TR) + dist(BL, BR)) / 2);
+    let h = Math.round((dist(TL, BL) + dist(TR, BR)) / 2);
+    const scale = Math.min(1, 1000 / Math.max(w, h, 1));
+    w = Math.max(1, Math.round(w * scale));
+    h = Math.max(1, Math.round(h * scale));
+    let canvas = perspectiveCrop(img, natCorners, w, h);
+    canvas = rotateCanvas(canvas, rotation);
+    if (contrastOn) applyContrast(canvas);
+    return canvas.toDataURL('image/jpeg', 0.7);
+  }
+
+  // 邊框／旋轉／對比隨手拖動時debounce 重算一次輸出大小，給「1.2 MB → 240 KB」用
+  useEffect(() => {
+    const h = setTimeout(() => {
+      if (!imgRef.current || !imgRef.current.naturalWidth) return;
+      try {
+        setOutBytes(dataUrlBytes(buildOutput()));
+      } catch (e) {}
+    }, 250);
+    return () => clearTimeout(h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [corners, rotation, contrastOn]);
+
+  function ptToFraction(clientX, clientY) {
+    const r = wrapperRef.current.getBoundingClientRect();
+    const x = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+    const y = Math.min(1, Math.max(0, (clientY - r.top) / r.height));
+    return { x, y };
+  }
+
+  function onHandleDown(i) {
+    return (e) => {
+      e.preventDefault();
+      dragIdx.current = i;
+      const move = (ev) => {
+        if (dragIdx.current === null) return;
+        const p = ev.touches ? ev.touches[0] : ev;
+        const f = ptToFraction(p.clientX, p.clientY);
+        setCorners((prev) => {
+          const next = [...prev];
+          next[dragIdx.current] = f;
+          return next;
+        });
+      };
+      const up = () => {
+        dragIdx.current = null;
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        window.removeEventListener('touchmove', move);
+        window.removeEventListener('touchend', up);
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+      window.addEventListener('touchmove', move, { passive: false });
+      window.addEventListener('touchend', up);
+    };
+  }
+
+  function handleUse() {
+    let finalSrc = src;
+    try {
+      finalSrc = buildOutput();
+    } catch (e) {}
+    onUse(finalSrc, ocr.parsed);
+  }
+
+  const toolBtnStyle = (active) => ({
+    flex: 1,
+    padding: '11px 0',
+    minHeight: '44px',
+    fontSize: '12.5px',
+    border: `1px solid ${active ? C.blue : C.line}`,
+    color: active ? C.blueDeep : C.sub,
+    fontWeight: active ? 700 : 400,
+  });
+
+  return (
+    <FullScreenSheet>
+      <div
+        className="sticky top-0 z-10 flex items-center justify-between kaeru-pad py-4"
+        style={{ backgroundColor: C.page, borderBottom: `1px solid ${C.ink}` }}
+      >
+        <button onClick={onRetake} style={{ fontSize: '13px', color: C.sub }}>
+          {t.retakePhoto}
+        </button>
+        <h2 className="font-bold" style={{ fontSize: '15px' }}>
+          {t.confirmPhoto}
+        </h2>
+        <button
+          onClick={handleUse}
+          className="font-bold"
+          style={{ fontSize: '13px', color: C.blueDeep }}
+        >
+          {t.usePhoto}
+        </button>
+      </div>
+
+      <div className="kaeru-pad py-6">
+        <div
+          className="flex items-center justify-center"
+          style={{
+            height: '392px',
+            backgroundColor: C.soft,
+            border: `1px solid ${C.line}`,
+          }}
+        >
+          <div ref={wrapperRef} className="relative inline-block" style={{ height: '100%' }}>
+            <img
+              ref={imgRef}
+              src={src}
+              alt=""
+              className="block"
+              style={{ height: '100%', width: 'auto' }}
+            />
+            <svg
+              className="pointer-events-none absolute inset-0 h-full w-full"
+              style={{ position: 'absolute', top: 0, left: 0 }}
+            >
+              <polygon
+                points={corners.map((c) => `${c.x * 100}%,${c.y * 100}%`).join(' ')}
+                fill="rgba(119,137,154,0.12)"
+                stroke={C.blue}
+                strokeWidth="1.5"
+              />
+            </svg>
+            {corners.map((c, i) => (
+              <div
+                key={i}
+                onPointerDown={onHandleDown(i)}
+                onTouchStart={onHandleDown(i)}
+                className="absolute"
+                style={{
+                  left: `${c.x * 100}%`,
+                  top: `${c.y * 100}%`,
+                  width: '24px',
+                  height: '24px',
+                  marginLeft: '-12px',
+                  marginTop: '-12px',
+                  border: `2px solid ${C.blueDeep}`,
+                  backgroundColor: 'rgba(255,255,255,0.6)',
+                  touchAction: 'none',
+                  cursor: 'grab',
+                }}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {fromScan && <Badge tone="sage">{t.edgeAutoOk}</Badge>}
+          {outBytes !== null && (
+            <Badge tone="outline">
+              {formatBytes(inBytes)} → {formatBytes(outBytes)}
+            </Badge>
+          )}
+        </div>
+
+        <div className="mt-4 flex gap-2">
+          <button style={toolBtnStyle(true)}>{t.toolAdjustBorder}</button>
+          <button
+            style={toolBtnStyle(false)}
+            onClick={() => setRotation((r) => (r + 90) % 360)}
+          >
+            {t.toolRotate}
+          </button>
+          <button
+            style={toolBtnStyle(contrastOn)}
+            onClick={() => setContrastOn((v) => !v)}
+          >
+            {t.toolContrast}
+          </button>
+        </div>
+
+        {!ocr.loading && ocr.parsed && (
+          <div
+            className="mt-4 flex items-end justify-between"
+            style={{ backgroundColor: C.soft, padding: '14px' }}
+          >
+            <div>
+              <p style={{ fontSize: '11px', color: C.sub }}>{t.ocrAmountLabel}</p>
+              <p className="mt-1" style={{ fontSize: '10.5px', color: C.sub }}>
+                {t.ocrHint}
+              </p>
+            </div>
+            <p
+              className="font-semibold tabular-nums"
+              style={{ fontSize: '20px', color: C.blueDeep }}
+            >
+              ¥
+              {yen(
+                ocr.parsed.rate === 'mixed'
+                  ? (ocr.parsed.incl8 || 0) + (ocr.parsed.incl10 || 0)
+                  : ocr.parsed.incl,
+              )}
+            </p>
+          </div>
+        )}
+
+        <button
+          onClick={handleUse}
+          className="mt-4 w-full py-3.5 text-sm font-semibold"
+          style={{ backgroundColor: C.blue, color: '#FFFFFF' }}
+        >
+          {!ocr.loading && ocr.parsed ? t.useWithAmount : t.useOnly}
+        </button>
+      </div>
+    </FullScreenSheet>
   );
 }
 
@@ -4420,7 +5068,7 @@ function DetailSheet({
   t,
   item,
   group,
-  photo,
+  photos,
   taxOf,
   settings,
   onClose,
@@ -4745,16 +5393,26 @@ function DetailSheet({
             >
               {t.photo}
             </p>
-            <div
-              className="mt-2 flex items-center justify-center"
-              style={{ backgroundColor: C.soft, height: '96px' }}
-            >
-              {photo ? (
-                <img src={photo} alt="" className="h-full object-contain" />
-              ) : (
+            {photos && photos.length ? (
+              <div className="mt-2 flex gap-2 overflow-x-auto">
+                {photos.map((src, i) => (
+                  <div
+                    key={i}
+                    className="flex shrink-0 items-center justify-center"
+                    style={{ backgroundColor: C.soft, height: '96px', width: '96px' }}
+                  >
+                    <img src={src} alt="" className="h-full w-full object-cover" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div
+                className="mt-2 flex items-center justify-center"
+                style={{ backgroundColor: C.soft, height: '96px' }}
+              >
                 <span style={{ color: C.sub, fontSize: '13px' }}>{t.photo}</span>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )}
       </div>
