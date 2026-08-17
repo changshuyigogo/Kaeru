@@ -1,0 +1,31 @@
+{
+  "name": "Kaeru 日本退稅小幫手",
+  "short_name": "Kaeru",
+  "lang": "zh-Hant",
+  "background_color": "#FFFFFF",
+  "theme_color": "#93A392",
+  "display": "standalone",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icon-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
