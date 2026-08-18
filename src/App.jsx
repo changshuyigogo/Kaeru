@@ -123,6 +123,7 @@ const T = {
     libraryHint: '最多選 5 張',
     scanDoc: '掃描文件',
     scanDocHint: '自動抓邊框、拉正、去陰影',
+    frameReminder: '檢查整張收據有沒有拍進框內，最下面的稅率金額要拍到',
     cameraDenied: '沒有相機權限',
     photoDenied: '沒有照片圖庫權限',
     openSettings: '去設定開啟',
@@ -360,6 +361,7 @@ const T = {
     libraryHint: '最大 5 枚まで選択',
     scanDoc: '文書をスキャン',
     scanDocHint: '枠を自動検出・補正、影も除去',
+    frameReminder: 'レシート全体が写っているか確認してください。下部の税率・金額も撮れていますか？',
     cameraDenied: 'カメラの権限がありません',
     photoDenied: 'フォトライブラリの権限がありません',
     openSettings: '設定を開く',
@@ -4968,6 +4970,9 @@ function PhotoConfirmSheet({ t, src, fromScan, onRetake, onUse }) {
       </div>
 
       <div className="kaeru-pad py-6">
+        <p className="mb-3" style={{ color: C.sub, fontSize: '12px', lineHeight: 1.6 }}>
+          {t.frameReminder}
+        </p>
         <div
           className="flex items-center justify-center"
           style={{
