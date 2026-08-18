@@ -27,6 +27,13 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- ReceiptScannerPlugin 用的日文文字辨識模型。透過 Play 商店安裝時，
+             這行會讓系統在安裝當下就預先下載模型；side-load 安裝（目前的
+             debug apk）沒有這個好處，第一次辨識時仍然要臨時下載，需要網路。 -->
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="ocr_japanese" />
     </application>
 
     <!-- Permissions -->

@@ -43,6 +43,25 @@ class ReceiptScannerPlugin : Plugin() {
 
   private var pendingCallbackId: String? = null
 
+  // App 一啟動就先叫醒日文辨識模型，讓 ML Kit 趁早（在使用者實際拍照
+  // 之前）把模型從 Play 服務下載好，而不是等到第一次真的呼叫
+  // recognizeText 時才臨時下載——側載安裝的 apk 沒有 Play 商店幫忙
+  // 預先下載，這一步能省掉使用者第一次用時因為模型還沒到位而失敗。
+  override fun load() {
+    super.load()
+    try {
+      val warm = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+      val image = InputImage.fromBitmap(warm, 0)
+      TextRecognition.getClient(JapaneseTextRecognizerOptions.Builder().build())
+        .process(image)
+        .addOnCompleteListener {
+          // 不管辨識結果是什麼，這次呼叫本身就會觸發模型下載/初始化
+        }
+    } catch (e: Exception) {
+      // 預熱失敗不影響其他功能，之後真的呼叫 recognizeText 還是會重試
+    }
+  }
+
   @PluginMethod
   fun scanDocument(call: PluginCall) {
     if (getPermissionState("camera") != PermissionState.GRANTED) {

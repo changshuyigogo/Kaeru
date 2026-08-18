@@ -4846,10 +4846,15 @@ function PhotoConfirmSheet({ t, src, fromScan, onRetake, onUse }) {
     ReceiptScanner.recognizeText({ image: src })
       .then((res) => {
         if (!alive) return;
+        // 方便真機除錯：辨識出的原始文字跟解析結果都印出來，
+        // 「讀不到」跟「辨識本身失敗」在畫面上長一樣，但 console 看得出差別
+        console.log('[ReceiptScanner] recognized text:', res?.text);
         const parsed = parseReceiptOCR(res?.text || '');
+        console.log('[ReceiptScanner] parsed:', parsed);
         setOcr({ loading: false, parsed });
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('[ReceiptScanner] recognizeText failed:', err);
         if (alive) setOcr({ loading: false, parsed: null });
       });
     return () => {
