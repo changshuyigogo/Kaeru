@@ -70,7 +70,7 @@ class ReceiptScannerPlugin : Plugin() {
     val options =
       GmsDocumentScannerOptions.Builder()
         .setGalleryImportAllowed(false)
-        .setPageLimit(4)
+        .setPageLimit(5)
         .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
         .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
         .build()

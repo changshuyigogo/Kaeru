@@ -36,6 +36,7 @@ import ReceiptScanner from './receiptScanner.js';
 const MAIN_KEY = 'jptax:v2';
 const photoKey = (id) => `jptax:photo:${id}`;
 const STAGES = ['purchased', 'registered', 'verified', 'refunded'];
+const MAX_PHOTOS = 5; // 一張收據最多存幾張照片
 
 /* 莫蘭迪色票 */
 const FONT =
@@ -119,7 +120,7 @@ const T = {
     takePhotoOption: '拍照',
     takePhotoHint: '開相機，對準收據拍一張',
     chooseFromLibrary: '從相簿選',
-    libraryHint: '最多選 4 張',
+    libraryHint: '最多選 5 張',
     scanDoc: '掃描文件',
     scanDocHint: '自動抓邊框、拉正、去陰影',
     cameraDenied: '沒有相機權限',
@@ -356,7 +357,7 @@ const T = {
     takePhotoOption: '写真を撮る',
     takePhotoHint: 'カメラを起動してレシートを撮影',
     chooseFromLibrary: 'フォトライブラリから選ぶ',
-    libraryHint: '最大 4 枚まで選択',
+    libraryHint: '最大 5 枚まで選択',
     scanDoc: '文書をスキャン',
     scanDocHint: '枠を自動検出・補正、影も除去',
     cameraDenied: 'カメラの権限がありません',
@@ -3769,7 +3770,7 @@ function BottomSheet({ onClose, children }) {
             backgroundColor: C.page,
             borderTop: `1px solid ${C.ink}`,
             borderRadius: 0,
-            padding: '22px 26px 30px',
+            padding: '22px 26px max(30px, calc(env(safe-area-inset-bottom) + 14px))',
             animation: 'jpSlideUp 200ms cubic-bezier(0.4,0,0.2,1)',
           }}
         >
@@ -4146,14 +4147,14 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
     setRate(r);
   }
 
-  const remaining = 4 - imgs.length;
+  const remaining = MAX_PHOTOS - imgs.length;
 
   async function onPick(e) {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
     try {
       const src = await compressImage(f);
-      setImgs((p) => [...p, src].slice(0, 4));
+      setImgs((p) => [...p, src].slice(0, MAX_PHOTOS));
     } catch (err) {}
     e.target.value = '';
   }
@@ -4205,7 +4206,7 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
       for (const f of files.slice(0, remaining)) {
         try {
           const src = await compressImageSrc(f.webPath || f.path);
-          setImgs((p) => (p.length < 4 ? [...p, src] : p));
+          setImgs((p) => (p.length < MAX_PHOTOS ? [...p, src] : p));
         } catch (err) {}
       }
     } catch (err) {
@@ -4224,7 +4225,7 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
       for (const raw of rest.slice(0, remaining - 1)) {
         try {
           const src = await compressImageSrc(raw);
-          setImgs((p) => (p.length < 4 ? [...p, src] : p));
+          setImgs((p) => (p.length < MAX_PHOTOS ? [...p, src] : p));
         } catch (err) {}
       }
     } catch (err) {
@@ -4235,7 +4236,7 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
 
   function finishConfirm(src, parsed) {
     setConfirmPhoto(null);
-    if (src) setImgs((p) => (p.length < 4 ? [...p, src] : p));
+    if (src) setImgs((p) => (p.length < MAX_PHOTOS ? [...p, src] : p));
     if (parsed) {
       if (parsed.shop && !shop.trim()) setShop(parsed.shop);
       if (parsed.date) setDate(parsed.date);
@@ -4664,7 +4665,7 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
                 <div
                   key={i}
                   className="relative"
-                  style={{ width: '74px', height: '74px' }}
+                  style={{ width: '74px', height: '74px', margin: '4px' }}
                 >
                   <img
                     src={src}
@@ -4673,9 +4674,19 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
                     style={{ border: `1px solid ${C.line}` }}
                   />
                   <button
-                    onClick={() => removeImg(i)}
-                    className="absolute right-1 top-1 rounded-full p-0.5"
-                    style={{ backgroundColor: C.ink, color: '#FFFFFF' }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeImg(i);
+                    }}
+                    className="absolute flex items-center justify-center rounded-full"
+                    style={{
+                      right: '-8px',
+                      top: '-8px',
+                      width: '20px',
+                      height: '20px',
+                      backgroundColor: C.ink,
+                      color: '#FFFFFF',
+                    }}
                   >
                     <X size={11} />
                   </button>
@@ -4992,7 +5003,7 @@ function PhotoConfirmSheet({ t, src, fromScan, onRetake, onUse }) {
                   height: '24px',
                   marginLeft: '-12px',
                   marginTop: '-12px',
-                  border: `2px solid ${C.blueDeep}`,
+                  border: `2px solid ${C.blue}`,
                   backgroundColor: 'rgba(255,255,255,0.6)',
                   touchAction: 'none',
                   cursor: 'grab',
