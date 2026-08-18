@@ -4995,20 +4995,43 @@ function PhotoConfirmSheet({ t, src, fromScan, onRetake, onUse }) {
                 key={i}
                 onPointerDown={onHandleDown(i)}
                 onTouchStart={onHandleDown(i)}
-                className="absolute"
+                className="absolute flex items-center justify-center"
                 style={{
                   left: `${c.x * 100}%`,
                   top: `${c.y * 100}%`,
-                  width: '24px',
-                  height: '24px',
-                  marginLeft: '-12px',
-                  marginTop: '-12px',
-                  border: `2px solid ${C.blue}`,
-                  backgroundColor: 'rgba(255,255,255,0.6)',
+                  // 觸控熱區比視覺上的角括號大一圈，方便手指拖曳
+                  width: '36px',
+                  height: '36px',
+                  marginLeft: '-18px',
+                  marginTop: '-18px',
                   touchAction: 'none',
                   cursor: 'grab',
                 }}
-              />
+              >
+                {/* L 形角括號，跟 29/31 兩張設計稿的記號一致；四個角用同一個
+                    「左上」路徑，其他三個角靠 scaleX/scaleY 翻轉出來 */}
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  style={{
+                    transform: [
+                      'none',
+                      'scaleX(-1)',
+                      'scale(-1,-1)',
+                      'scaleY(-1)',
+                    ][i],
+                  }}
+                >
+                  <path
+                    d="M2 12 L2 2 L12 2"
+                    fill="none"
+                    stroke={C.blue}
+                    strokeWidth="2.5"
+                    strokeLinecap="square"
+                  />
+                </svg>
+              </div>
             ))}
           </div>
         </div>
