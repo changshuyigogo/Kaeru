@@ -1353,9 +1353,9 @@ function Ticket({ children, tone = 'normal', onClick, separator }) {
   );
 }
 
-function Field({ label, hint, children }) {
+function Field({ label, hint, children, as: As = 'label' }) {
   return (
-    <label className="block">
+    <As className="block">
       <div className="mb-2 flex items-baseline justify-between gap-2">
         <span
           className="font-bold"
@@ -1370,7 +1370,7 @@ function Field({ label, hint, children }) {
         )}
       </div>
       {children}
-    </label>
+    </As>
   );
 }
 
@@ -4304,8 +4304,13 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
     <>
     <FullScreenSheet>
       <div
-        className="sticky top-0 z-10 flex items-center justify-between kaeru-pad py-4"
-        style={{ backgroundColor: C.page, borderBottom: `1px solid ${C.ink}` }}
+        className="sticky top-0 z-10 flex items-center justify-between kaeru-pad"
+        style={{
+          backgroundColor: C.page,
+          borderBottom: `1px solid ${C.ink}`,
+          paddingTop: 'max(16px, env(safe-area-inset-top))',
+          paddingBottom: '16px',
+        }}
       >
         <button onClick={onClose} style={{ fontSize: '15px', color: C.sub }}>
           {t.cancel}
@@ -4660,37 +4665,30 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
           </p>
         )}
 
-        <Field label={t.photo}>
+        <Field label={t.photo} as="div">
           {imgs.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-start gap-2">
               {imgs.map((src, i) => (
                 <div
                   key={i}
-                  className="relative"
-                  style={{ width: '74px', height: '74px', margin: '4px' }}
+                  style={{ width: '74px', margin: '4px' }}
                 >
+                  {/* 圖片本身完全不能點，刪除是下面獨立一顆按鈕，兩者
+                      之間留真的間距，不共用點擊區——手機瀏覽器會把小按鈕
+                      的可點範圍自動撐大，疊在照片上一定會誤觸 */}
                   <img
                     src={src}
                     alt=""
-                    className="h-full w-full object-cover"
-                    style={{ border: `1px solid ${C.line}` }}
+                    className="block w-full object-cover"
+                    style={{ height: '74px', border: `1px solid ${C.line}` }}
                   />
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeImg(i);
-                    }}
-                    className="absolute flex items-center justify-center rounded-full"
-                    style={{
-                      right: '-8px',
-                      top: '-8px',
-                      width: '20px',
-                      height: '20px',
-                      backgroundColor: C.ink,
-                      color: '#FFFFFF',
-                    }}
+                    onClick={() => removeImg(i)}
+                    className="mt-1 flex w-full items-center justify-center gap-1"
+                    style={{ color: C.clayInk, fontSize: '11px', padding: '2px 0' }}
                   >
-                    <X size={11} />
+                    <X size={10} />
+                    {t.delete}
                   </button>
                 </div>
               ))}
@@ -4951,8 +4949,13 @@ function PhotoConfirmSheet({ t, src, fromScan, onRetake, onUse }) {
   return (
     <FullScreenSheet>
       <div
-        className="sticky top-0 z-10 flex items-center justify-between kaeru-pad py-4"
-        style={{ backgroundColor: C.page, borderBottom: `1px solid ${C.ink}` }}
+        className="sticky top-0 z-10 flex items-center justify-between kaeru-pad"
+        style={{
+          backgroundColor: C.page,
+          borderBottom: `1px solid ${C.ink}`,
+          paddingTop: 'max(16px, env(safe-area-inset-top))',
+          paddingBottom: '16px',
+        }}
       >
         <button onClick={onRetake} style={{ fontSize: '13px', color: C.sub }}>
           {t.retakePhoto}
@@ -5139,8 +5142,13 @@ function DetailSheet({
   return (
     <FullScreenSheet>
       <div
-        className="sticky top-0 z-10 flex items-center justify-between kaeru-pad py-4"
-        style={{ backgroundColor: C.page, borderBottom: `1px solid ${C.line}` }}
+        className="sticky top-0 z-10 flex items-center justify-between kaeru-pad"
+        style={{
+          backgroundColor: C.page,
+          borderBottom: `1px solid ${C.line}`,
+          paddingTop: 'max(16px, env(safe-area-inset-top))',
+          paddingBottom: '16px',
+        }}
       >
         <button onClick={onClose} style={{ fontSize: '13px', color: C.sub }}>
           ‹ {t.receipts}
