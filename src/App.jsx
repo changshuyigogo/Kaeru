@@ -57,13 +57,13 @@ const AIRPORTS = [
   // 東北
   { code: 'SDJ', name: '仙台空港', city: '仙台', region: '東北', hours: 2.5 },
   { code: 'AOJ', name: '青森空港', city: '青森', region: '東北', hours: 2 },
-  { code: 'HNA', name: '花巻空港', city: '花巻', region: '東北', hours: 2 },
+  { code: 'HNA', name: '花巻空港', city: '岩手', region: '東北', hours: 2 },
   { code: 'AXT', name: '秋田空港', city: '秋田', region: '東北', hours: 2 },
   { code: 'FKS', name: '福島空港', city: '福島', region: '東北', hours: 2 },
   // 関東
   { code: 'IBR', name: '茨城空港', city: '茨城', region: '関東', hours: 2 },
   // 中部・北陸
-  { code: 'KMQ', name: '小松空港', city: '小松', region: '中部・北陸', hours: 2.5 },
+  { code: 'KMQ', name: '小松空港', city: '石川', region: '中部・北陸', hours: 2.5 },
   { code: 'KIJ', name: '新潟空港', city: '新潟', region: '中部・北陸', hours: 2 },
   { code: 'TOY', name: '富山空港', city: '富山', region: '中部・北陸', hours: 2 },
   { code: 'FSZ', name: '静岡空港', city: '静岡', region: '中部・北陸', hours: 2.5 },
@@ -72,10 +72,10 @@ const AIRPORTS = [
   // 中国
   { code: 'OKJ', name: '岡山空港', city: '岡山', region: '中国', hours: 2 },
   { code: 'HIJ', name: '広島空港', city: '広島', region: '中国', hours: 2.5 },
-  { code: 'YGJ', name: '米子空港', city: '米子', region: '中国', hours: 2 },
+  { code: 'YGJ', name: '米子空港', city: '鳥取', region: '中国', hours: 2 },
   // 四国
-  { code: 'TAK', name: '高松空港', city: '高松', region: '四国', hours: 2 },
-  { code: 'MYJ', name: '松山空港', city: '松山', region: '四国', hours: 2 },
+  { code: 'TAK', name: '高松空港', city: '香川', region: '四国', hours: 2 },
+  { code: 'MYJ', name: '松山空港', city: '愛媛', region: '四国', hours: 2 },
   { code: 'KCZ', name: '高知空港', city: '高知', region: '四国', hours: 2 },
   // 九州
   { code: 'KMJ', name: '熊本空港', city: '熊本', region: '九州', hours: 2 },
@@ -83,11 +83,14 @@ const AIRPORTS = [
   { code: 'KMI', name: '宮崎空港', city: '宮崎', region: '九州', hours: 2 },
   { code: 'OIT', name: '大分空港', city: '大分', region: '九州', hours: 2 },
   { code: 'HSG', name: '佐賀空港', city: '佐賀', region: '九州', hours: 2 },
-  { code: 'KKJ', name: '北九州空港', city: '福岡県', region: '九州', hours: 2 },
+  // 清單頁副標是「北九州」，但搜尋結果頁改標「福岡県 · 北九州」（讓人
+  // 知道北九州在福岡縣）——citySearchLabel 只給搜尋結果用，清單分組
+  // 瀏覽仍用 city。
+  { code: 'KKJ', name: '北九州空港', city: '北九州', citySearchLabel: '福岡県 · 北九州', region: '九州', hours: 2 },
   // 沖縄
-  { code: 'OKA', name: '那覇空港', city: '那覇', region: '沖縄', hours: 2.5 },
-  { code: 'ISG', name: '石垣空港', city: '石垣', region: '沖縄', hours: 2 },
-  { code: 'SHI', name: '下地島空港', city: '下地島', region: '沖縄', hours: 2 },
+  { code: 'OKA', name: '那覇空港', city: '沖縄', region: '沖縄', hours: 2.5 },
+  { code: 'ISG', name: '石垣空港', city: '石垣島', region: '沖縄', hours: 2 },
+  { code: 'SHI', name: '下地島空港', city: '宮古島', region: '沖縄', hours: 2 },
 ];
 
 // 地區清單固定順序；chip 是籌碼列的短標籤，header 是清單裡的組標題
@@ -2263,7 +2266,10 @@ export default function App() {
         .kaeru-refund{font-size:42px}
         @media (min-width:480px){.kaeru-refund{font-size:46px}}
         .kaeru-group-gap{display:flex;flex-direction:column;gap:18px}
-        @media (min-width:480px){.kaeru-group-gap{gap:22px}}`}</style>
+        @media (min-width:480px){.kaeru-group-gap{gap:22px}}
+        /* web 版隱藏捲軸，但保留可滑動——外境機場選擇頁的籌碼列／清單用 */
+        .no-scrollbar{scrollbar-width:none;-ms-overflow-style:none}
+        .no-scrollbar::-webkit-scrollbar{display:none}`}</style>
       <div
         className="kaeru-app"
         style={{
@@ -4992,10 +4998,11 @@ function AirportPickerSheet({ t, selected, onClose, onPick }) {
   // 沒搜尋時照地區分組，籌碼列可以點了跳到對應那組。
   const results = searching
     ? AIRPORTS.map((a) => {
+        const cityText = a.citySearchLabel || a.city;
         const nameM = findMatch(a.name, q);
-        const cityM = !nameM ? findMatch(a.city, q) : null;
+        const cityM = !nameM ? findMatch(cityText, q) : null;
         const codeM = !nameM && !cityM ? findMatch(a.code, q) : null;
-        return { a, nameM, cityM, codeM, hit: !!(nameM || cityM || codeM) };
+        return { a, cityText, nameM, cityM, codeM, hit: !!(nameM || cityM || codeM) };
       }).filter((r) => r.hit)
     : null;
 
@@ -5027,7 +5034,7 @@ function AirportPickerSheet({ t, selected, onClose, onPick }) {
             <Highlight text={a.name} match={extra.nameM} />
           </span>
           <span className="mt-0.5 block" style={{ fontSize: '11px', color: C.sub }}>
-            <Highlight text={a.city} match={extra.cityM} /> · {t.arriveEarlyPrefix}{' '}
+            <Highlight text={extra.cityText || a.city} match={extra.cityM} /> · {t.arriveEarlyPrefix}{' '}
             {arriveHoursText(t, a.hours)}
             {extra.regionHeader && ` · ${extra.regionHeader}`}
           </span>
@@ -5103,7 +5110,7 @@ function AirportPickerSheet({ t, selected, onClose, onPick }) {
 
         {!searching && (
           <div
-            className="kaeru-pad flex gap-1.5 overflow-x-auto"
+            className="kaeru-pad no-scrollbar flex gap-1.5 overflow-x-auto"
             style={{ paddingTop: '12px', paddingBottom: '2px' }}
           >
             {AIRPORT_REGIONS.map((region) => (
@@ -5125,11 +5132,12 @@ function AirportPickerSheet({ t, selected, onClose, onPick }) {
           </div>
         )}
 
-        <div className="kaeru-pad flex-1 overflow-y-auto" style={{ minHeight: 0, paddingBottom: '8px' }}>
+        <div className="kaeru-pad no-scrollbar flex-1 overflow-y-auto" style={{ minHeight: 0, paddingBottom: '8px' }}>
           {searching
-            ? results.map(({ a, nameM, cityM, codeM }, i) =>
+            ? results.map(({ a, cityText, nameM, cityM, codeM }, i) =>
                 row(a, {
                   first: i === 0,
+                  cityText,
                   nameM,
                   cityM,
                   codeM,
