@@ -308,6 +308,8 @@ const T = {
     newTrip: '新增行程',
     tripName: '行程名稱',
     tripNamePh: '例如 大阪 11 月',
+    tripUnnamed: '還沒命名的行程',
+    unfilled: '未填',
     noDeparture: '未設定回程班機時間',
     tripReceipts: '張收據',
     tripSwitch: '切換到這趟',
@@ -339,6 +341,33 @@ const T = {
     statusRefunded: '張已退款',
     statusDead: '張失效',
     deleteTripWarning: (n) => `刪除行程會一起刪掉這 ${n} 張收據和照片，無法復原。`,
+    emptyUnnamedKicker: '這趟行程',
+    emptyUnnamedTitle: '還沒有名字',
+    emptyUnnamedDesc:
+      '收據會存進一趟行程裡。先幫這趟取個名字、填上回程時間，之後的倒數和查驗進度才算得出來。',
+    emptyUnnamedCta: '先幫這趟行程取個名字',
+    emptyUnnamedOr: '或者',
+    emptyUnnamedEscape: '先加一張收據，晚點再填',
+    emptyUnnamedRulesTitle: '先看懂規則',
+    rule1: '同一間店、同一天，稅抜合計滿 5,000 円才能退',
+    rule2: '在日本吃掉、用掉的東西，那張收據整張失效',
+    rule3: '購買日算起 90 天內要辦完手續',
+    tripCreatedBadge: '行程已建立',
+    noReceiptsTitle: '還沒有收據',
+    noReceiptsDesc:
+      '在免稅櫃檯結完帳，就把收據拍進來。同一間店同一天的會自動合併計算。',
+    rulesLinkLabel: '先看一遍規則',
+    departedTopLabel: '這趟已經結束　帰国済み',
+    departedValue: '已出境',
+    refundedTotalLabel: '已退回稅額',
+    endedSheetTitle: '這趟看起來結束了',
+    endedSheetDesc: (name, days, count) =>
+      `${name}的回程班機已經飛了 ${days} 天，${count} 張收據也都處理完。要開始新的行程嗎？`,
+    endedSheetSettleLabel: '這趟總共退回',
+    endedSheetCta: '建立新行程',
+    endedSheetNotNow: '先不要',
+    endedSheetViewRecords: '看這趟的紀錄',
+    endedSheetFooterNote: '舊行程和收據都會留著，隨時可以從選單切回來。',
     create: '建立',
     menu: '功能',
     pickDate: '選日期',
@@ -583,6 +612,8 @@ const T = {
     newTrip: '旅程を追加',
     tripName: '旅程名',
     tripNamePh: '例：大阪 11 月',
+    tripUnnamed: '名前未設定の旅程',
+    unfilled: '未入力',
     noDeparture: '出発時刻 未設定',
     tripReceipts: '件',
     tripSwitch: 'この旅程に切り替え',
@@ -615,6 +646,34 @@ const T = {
     statusRefunded: '件 返金済み',
     statusDead: '件 失効',
     deleteTripWarning: (n) => `旅程を削除すると、この ${n} 件のレシートと写真も一緒に削除されます。元に戻せません。`,
+    emptyUnnamedKicker: 'この旅程',
+    emptyUnnamedTitle: 'まだ名前がありません',
+    emptyUnnamedDesc:
+      'レシートは旅程に紐づいて保存されます。まず名前と帰国時刻を入れておくと、カウントダウンや確認の進み具合が計算できるようになります。',
+    emptyUnnamedCta: 'この旅程に名前をつける',
+    emptyUnnamedOr: 'または',
+    emptyUnnamedEscape: '先にレシートを追加して、あとで入力する',
+    emptyUnnamedRulesTitle: 'ルールを先に知っておく',
+    rule1: '同一店舗・同一日、税抜合計 5,000 円以上で返金対象',
+    rule2: '日本国内で消費・使用した物は、そのレシート全体が無効',
+    rule3: '購入日から 90 日以内に手続きが必要',
+    tripCreatedBadge: '旅程を作成済み',
+    noReceiptsTitle: 'まだレシートがありません',
+    noReceiptsDesc:
+      '免税カウンターで会計したら、レシートを撮影してください。同一店舗・同一日のものは自動でまとめて計算されます。',
+    rulesLinkLabel: 'ルールを先に確認する',
+    departedTopLabel: '這趟已經結束　帰国済み',
+    departedValue: '帰国済み',
+    refundedTotalLabel: '返金済み額',
+    endedSheetTitle: 'この旅程は終わったようです',
+    endedSheetDesc: (name, days, count) =>
+      `${name}の帰国便が飛んでから ${days} 日、レシート ${count} 件も処理済みです。新しい旅程を始めますか？`,
+    endedSheetSettleLabel: '今回の返金合計',
+    endedSheetCta: '新しい旅程を作る',
+    endedSheetNotNow: '今はしない',
+    endedSheetViewRecords: 'この旅程の記録を見る',
+    endedSheetFooterNote:
+      '前の旅程とレシートはそのまま残ります。メニューからいつでも切り替えられます。',
     create: '作成',
     menu: 'メニュー',
     pickDate: '日付を選択',
@@ -1924,6 +1983,7 @@ export default function App() {
   const [activeId, setActiveId] = useState(null);
   const [tripSheet, setTripSheet] = useState(false);
   const [editingTripId, setEditingTripId] = useState(null);
+  const [endedSheetOpen, setEndedSheetOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [tab, setTab] = useState('home');
   const [editing, setEditing] = useState(null);
@@ -2068,6 +2128,7 @@ export default function App() {
   const stats = useMemo(() => {
     let totalIncl = 0,
       refundable = 0,
+      refundedTax = 0,
       pendingCount = 0,
       minDays = null;
     for (const it of tripItems) {
@@ -2075,14 +2136,39 @@ export default function App() {
       const g = groups.get(groupKey(it));
       const eligible = g && g.ok && !it.consumed;
       if (eligible && it.status !== 'refunded') refundable += taxOf(it);
+      if (eligible && it.status === 'refunded') refundedTax += taxOf(it);
       if (it.status !== 'refunded') {
         pendingCount++;
         const d = daysLeft(it.date);
         if (d !== null && (minDays === null || d < minDays)) minDays = d;
       }
     }
-    return { totalIncl, refundable, pendingCount, minDays };
+    return { totalIncl, refundable, refundedTax, pendingCount, minDays };
   }, [tripItems, groups]);
+
+  // 保守偵測「這趟結束了」：回程時間超過 24 小時，且這趟的收據全部
+  // 已退款或已失效（沒有任何一張還卡在待處理），才會跳一次提示。
+  // 沒有收據的行程永遠不會跳；跳過一次之後就在 trip 上記一個旗標，
+  // 這趟再也不會自動跳出來——一律等使用者自己按。
+  const activeTripStats = activeTrip ? tripStatsFor(activeTrip.id) : null;
+  const shouldPromptEnded =
+    !!activeTrip &&
+    !!activeTrip.departure &&
+    !activeTrip.endedPromptShown &&
+    !!activeTripStats &&
+    activeTripStats.count > 0 &&
+    activeTripStats.pending === 0 &&
+    Date.now() - new Date(activeTrip.departure).getTime() > 24 * 3600 * 1000;
+
+  useEffect(() => {
+    if (!shouldPromptEnded) return;
+    const id = activeTrip.id;
+    setEndedSheetOpen(true);
+    setTrips((prev) =>
+      prev.map((x) => (x.id === id ? { ...x, endedPromptShown: true } : x)),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldPromptEnded]);
 
   function upsert(input, photosData) {
     const item = { ...input, tripId: input.tripId || activeId };
@@ -2182,7 +2268,7 @@ export default function App() {
         className="kaeru-app"
         style={{
           backgroundColor: C.page,
-          opacity: tripSheet ? 0.35 : 1,
+          opacity: tripSheet || endedSheetOpen ? 0.35 : 1,
           transition: 'opacity 200ms',
         }}
       >
@@ -2216,8 +2302,8 @@ export default function App() {
                       className="mt-0.5 flex items-center gap-1 text-xs"
                       style={{ color: C.sub }}
                     >
-                      {activeTrip && activeTrip.name
-                        ? activeTrip.name
+                      {activeTrip
+                        ? activeTrip.name || t.tripUnnamed
                         : t.trips}
                       <ChevronRight size={12} />
                     </button>
@@ -2317,6 +2403,11 @@ export default function App() {
               hasItems={tripItems.length > 0}
               onAdd={() => setEditing('new')}
               onGoSettings={() => setTab('set')}
+              onEditTrip={() => setEditingTripId(activeId)}
+              onGoFaq={() => {
+                setTab('faq');
+                setQuizOn(false);
+              }}
             />
           )}
 
@@ -2410,6 +2501,28 @@ export default function App() {
         />
       )}
 
+      {endedSheetOpen && activeTrip && activeTripStats && (
+        <TripEndedSheet
+          t={t}
+          trip={activeTrip}
+          tripStats={activeTripStats}
+          refundedTax={stats.refundedTax}
+          daysSince={Math.floor(
+            (Date.now() - new Date(activeTrip.departure).getTime()) /
+              86400000,
+          )}
+          onClose={() => setEndedSheetOpen(false)}
+          onCreateNew={() => {
+            setEndedSheetOpen(false);
+            setTripSheet(true);
+          }}
+          onViewRecords={() => {
+            setEndedSheetOpen(false);
+            setTab('list');
+          }}
+        />
+      )}
+
       {editingTripId && (
         <TripEditSheet
           t={t}
@@ -2472,7 +2585,17 @@ export default function App() {
 
 /* ---------------- views ---------------- */
 
-function HomeView({ t, stats, settings, trip, hasItems, onAdd, onGoSettings }) {
+function HomeView({
+  t,
+  stats,
+  settings,
+  trip,
+  hasItems,
+  onAdd,
+  onGoSettings,
+  onEditTrip,
+  onGoFaq,
+}) {
   const dep = trip && trip.departure ? new Date(trip.departure) : null;
   const diffMs = dep ? dep - new Date() : null;
   const dDays = diffMs !== null ? Math.floor(diffMs / 86400000) : null;
@@ -2485,11 +2608,43 @@ function HomeView({ t, stats, settings, trip, hasItems, onAdd, onGoSettings }) {
     d
       ? `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
       : '';
+  const departed = !!dep && diffMs <= 0;
+
+  // 還沒有任何一張收據：先讓「行程」這個概念被看見，而不是悄悄疊在
+  // 匿名行程裡。有沒有名字／回程時間決定看到畫面 38 還是畫面 39。
+  if (!hasItems) {
+    const unnamed = !trip || !trip.name || !trip.departure;
+    return unnamed ? (
+      <EmptyUnnamedTrip t={t} onEditTrip={onEditTrip} onAdd={onAdd} />
+    ) : (
+      <EmptyNamedTrip t={t} trip={trip} onAdd={onAdd} onGoFaq={onGoFaq} />
+    );
+  }
 
   return (
     <div className="space-y-10 pb-6">
       <section className="pt-2">
-        {dep && diffMs > 0 ? (
+        {departed ? (
+          <>
+            <p
+              style={{
+                color: C.sub,
+                fontSize: '10.5px',
+                letterSpacing: '0.24em',
+              }}
+            >
+              {t.departedTopLabel}
+            </p>
+            <p className="mt-2" style={{ lineHeight: 1 }}>
+              <span
+                className="kaeru-bignum font-semibold"
+                style={{ color: C.ink }}
+              >
+                {t.departedValue}
+              </span>
+            </p>
+          </>
+        ) : dep && diffMs > 0 ? (
           <>
             <p
               style={{
@@ -2581,15 +2736,15 @@ function HomeView({ t, stats, settings, trip, hasItems, onAdd, onGoSettings }) {
         </Row>
 
         <Row
-          label={t.estRefund}
-          sub={`≈ NT$${twd(stats.refundable * settings.rate)}`}
+          label={departed ? t.refundedTotalLabel : t.estRefund}
+          sub={`≈ NT$${twd((departed ? stats.refundedTax : stats.refundable) * settings.rate)}`}
           align="end"
         >
           <span
             className="kaeru-refund font-semibold tabular-nums"
             style={{ color: C.blueDeep, lineHeight: 1 }}
           >
-            ¥{yen(stats.refundable)}
+            ¥{yen(departed ? stats.refundedTax : stats.refundable)}
           </span>
         </Row>
 
@@ -2638,37 +2793,128 @@ function HomeView({ t, stats, settings, trip, hasItems, onAdd, onGoSettings }) {
         </Row>
       </section>
 
-      {!hasItems && (
+      {!departed && (
         <section>
-          <p className="text-sm leading-7" style={{ color: C.sub }}>
-            {t.emptyHome}
-          </p>
-          <button
-            onClick={onAdd}
-            className="mt-4 w-full py-3 text-sm font-semibold"
-            style={{
-              backgroundColor: C.blue,
-              color: '#FFFFFF',
-              borderRadius: 0,
-            }}
+          <h3
+            className="font-bold"
+            style={{ color: C.blue, fontSize: '10.5px', letterSpacing: '0.24em' }}
           >
-            {t.addFirst}
-          </button>
+            {t.departChecklist}
+          </h3>
+          <ol
+            className="mt-4"
+            style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
+          >
+            {[t.step1(arriveHoursText(t, arriveBuffer)), t.step2, t.step3, t.step4].map((x, n) => (
+              <li key={n} className="flex" style={{ gap: '14px' }}>
+                <span
+                  className="shrink-0 font-bold tabular-nums"
+                  style={{ color: C.blue, fontSize: '11px' }}
+                >
+                  {String(n + 1).padStart(2, '0')}
+                </span>
+                <span style={{ fontSize: '13px', lineHeight: 1.75 }}>{x}</span>
+              </li>
+            ))}
+          </ol>
         </section>
       )}
+    </div>
+  );
+}
 
-      <section>
+// 空狀態．畫面 38：行程還沒命名（沒名字或沒回程時間），而且一張收據
+// 都還沒加。用一張待填卡把「行程」這個概念亮出來，主 CTA 去把名字和
+// 回程時間填上；逃生口讓使用者可以先加收據，晚點再回來補。
+function EmptyUnnamedTrip({ t, onEditTrip, onAdd }) {
+  return (
+    <div className="pb-6">
+      <section className="pt-2">
+        <div style={{ border: `1px dashed ${C.line}`, padding: '22px 20px' }}>
+          <p style={{ fontSize: '10.5px', letterSpacing: '0.24em', color: C.sub }}>
+            {t.emptyUnnamedKicker}
+          </p>
+          <p
+            className="mt-2 font-bold"
+            style={{ fontSize: '26px', color: C.sub, lineHeight: 1.2 }}
+          >
+            {t.emptyUnnamedTitle}
+          </p>
+          <div
+            className="mt-3 flex flex-col"
+            style={{
+              gap: '8px',
+              borderTop: `1px dashed ${C.line}`,
+              paddingTop: '12px',
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <span style={{ fontSize: '12.5px', color: C.sub }}>
+                {t.tripName}
+              </span>
+              <span
+                className="font-semibold"
+                style={{ fontSize: '12.5px', color: C.clayInk }}
+              >
+                {t.unfilled}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span style={{ fontSize: '12.5px', color: C.sub }}>
+                {t.departure}
+              </span>
+              <span
+                className="font-semibold"
+                style={{ fontSize: '12.5px', color: C.clayInk }}
+              >
+                {t.unfilled}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <p
+          className="mt-5"
+          style={{ fontSize: '13px', lineHeight: 1.95, color: C.ink }}
+        >
+          {t.emptyUnnamedDesc}
+        </p>
+
+        <button
+          onClick={onEditTrip}
+          className="mt-4 w-full py-3.5 font-bold"
+          style={{ backgroundColor: C.blue, color: '#FFFFFF', fontSize: '14px' }}
+        >
+          {t.emptyUnnamedCta}
+        </button>
+
+        <p className="mt-3 text-center" style={{ fontSize: '12.5px' }}>
+          <span style={{ color: C.sub }}>{t.emptyUnnamedOr}</span>{' '}
+          <button
+            onClick={onAdd}
+            className="font-semibold"
+            style={{ color: C.blueDeep }}
+          >
+            {t.emptyUnnamedEscape}
+          </button>
+        </p>
+      </section>
+
+      <section
+        className="mt-6"
+        style={{ borderTop: `1px solid ${C.ink}`, paddingTop: '16px' }}
+      >
         <h3
           className="font-bold"
           style={{ color: C.blue, fontSize: '10.5px', letterSpacing: '0.24em' }}
         >
-          {t.departChecklist}
+          {t.emptyUnnamedRulesTitle}
         </h3>
         <ol
           className="mt-4"
           style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
         >
-          {[t.step1(arriveHoursText(t, arriveBuffer)), t.step2, t.step3, t.step4].map((x, n) => (
+          {[t.rule1, t.rule2, t.rule3].map((x, n) => (
             <li key={n} className="flex" style={{ gap: '14px' }}>
               <span
                 className="shrink-0 font-bold tabular-nums"
@@ -2682,6 +2928,201 @@ function HomeView({ t, stats, settings, trip, hasItems, onAdd, onGoSettings }) {
         </ol>
       </section>
     </div>
+  );
+}
+
+// 空狀態．畫面 39：行程已經有名字、有回程時間，但還沒有任何一張
+// 收據。金額用 sub 色顯示（¥0 只是佔位，不是真的有消費），收據區塊
+// 改成填色 CTA，底下留一個「先看一遍規則」去 FAQ 的連結。
+function EmptyNamedTrip({ t, trip, onAdd, onGoFaq }) {
+  const airport = trip && trip.airport ? AIRPORTS.find((a) => a.code === trip.airport) : null;
+  return (
+    <div className="pb-6">
+      <section className="pt-2">
+        <div className="flex flex-wrap gap-1.5">
+          <Badge tone="sage" size="lg">
+            {t.tripCreatedBadge}
+          </Badge>
+          {airport && (
+            <span
+              className="font-semibold"
+              style={{
+                fontSize: '10.5px',
+                color: C.sub,
+                border: `1px solid ${C.line}`,
+                padding: '3px 7px',
+              }}
+            >
+              {airport.name} {airport.code}
+            </span>
+          )}
+        </div>
+      </section>
+
+      <section style={{ marginTop: '24px', borderTop: `1px solid ${C.ink}` }}>
+        <div
+          className="flex flex-col"
+          style={{ gap: '15px', paddingTop: '18px' }}
+        >
+          <div className="flex items-baseline justify-between">
+            <span style={{ fontSize: '12.5px', color: C.sub }}>
+              {t.totalSpent}
+            </span>
+            <span
+              className="font-semibold tabular-nums"
+              style={{ fontSize: '24px', color: C.sub }}
+            >
+              ¥0
+            </span>
+          </div>
+          <div
+            className="flex items-end justify-between"
+            style={{ borderTop: `1px solid ${C.line}`, paddingTop: '15px' }}
+          >
+            <span style={{ fontSize: '12.5px', color: C.sub }}>
+              {t.estRefund}
+            </span>
+            <span
+              className="font-semibold tabular-nums"
+              style={{
+                fontSize: '42px',
+                color: C.sub,
+                letterSpacing: '-0.01em',
+                lineHeight: 1,
+              }}
+            >
+              ¥0
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <section style={{ marginTop: '22px', padding: '20px', backgroundColor: C.soft }}>
+        <p className="font-bold" style={{ fontSize: '15px', color: C.ink }}>
+          {t.noReceiptsTitle}
+        </p>
+        <p className="mt-2" style={{ fontSize: '12.5px', lineHeight: 1.9, color: C.sub }}>
+          {t.noReceiptsDesc}
+        </p>
+        <button
+          onClick={onAdd}
+          className="mt-4 w-full py-3 font-bold"
+          style={{ backgroundColor: C.blue, color: '#FFFFFF', fontSize: '13px' }}
+        >
+          {t.addFirst}
+        </button>
+      </section>
+
+      <button
+        onClick={onGoFaq}
+        className="flex w-full items-center justify-between"
+        style={{ marginTop: '20px', borderTop: `1px solid ${C.line}`, paddingTop: '14px' }}
+      >
+        <span style={{ fontSize: '12.5px', color: C.ink }}>{t.rulesLinkLabel}</span>
+        <span className="font-semibold" style={{ fontSize: '12.5px', color: C.blueDeep }}>
+          {t.faqTitle} ›
+        </span>
+      </button>
+    </div>
+  );
+}
+
+// 畫面 40：偵測到「這趟結束了」跳出的底部面板。條件很嚴（回程超過
+// 24 小時、且這趟的收據全部退款或失效），只跳一次；三個出口都不會
+// 自動建立或切換行程，一律等使用者自己按。
+function TripEndedSheet({
+  t,
+  trip,
+  tripStats,
+  refundedTax,
+  daysSince,
+  onClose,
+  onCreateNew,
+  onViewRecords,
+}) {
+  return (
+    <BottomSheet onClose={onClose}>
+      <div className="flex items-start justify-between gap-3">
+        <h2
+          className="font-bold"
+          style={{ fontSize: '18px', lineHeight: 1.5, color: C.ink }}
+        >
+          {t.endedSheetTitle}
+        </h2>
+        <button onClick={onClose} style={{ color: C.sub }}>
+          <X size={15} />
+        </button>
+      </div>
+
+      <p className="mt-2" style={{ fontSize: '12.5px', lineHeight: 1.9, color: C.sub }}>
+        {t.endedSheetDesc(trip.name || t.tripUnnamed, daysSince, tripStats.count)}
+      </p>
+
+      <div
+        className="mt-3.5"
+        style={{ borderTop: `1px solid ${C.line}`, paddingTop: '14px' }}
+      >
+        <div className="flex items-baseline justify-between">
+          <span style={{ fontSize: '12.5px', color: C.sub }}>
+            {t.endedSheetSettleLabel}
+          </span>
+          <span
+            className="font-semibold tabular-nums"
+            style={{ fontSize: '20px', color: C.blueDeep }}
+          >
+            ¥{yen(refundedTax)}
+          </span>
+        </div>
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {tripStats.refunded > 0 && (
+            <Badge tone="sage">
+              {tripStats.refunded}
+              {t.statusRefunded}
+            </Badge>
+          )}
+          {tripStats.dead > 0 && (
+            <Badge tone="clay">
+              {tripStats.dead}
+              {t.statusDead}
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      <button
+        onClick={onCreateNew}
+        className="mt-5 w-full py-3.5 font-bold"
+        style={{ backgroundColor: C.blue, color: '#FFFFFF', fontSize: '13.5px' }}
+      >
+        {t.endedSheetCta}
+      </button>
+
+      <div className="mt-4 flex items-center justify-center" style={{ gap: '22px' }}>
+        <button onClick={onClose} style={{ fontSize: '12.5px', color: C.sub }}>
+          {t.endedSheetNotNow}
+        </button>
+        <button
+          onClick={onViewRecords}
+          className="font-semibold"
+          style={{ fontSize: '12.5px', color: C.blueDeep }}
+        >
+          {t.endedSheetViewRecords}
+        </button>
+      </div>
+
+      <p
+        className="mt-4"
+        style={{
+          borderTop: `1px solid ${C.line}`,
+          paddingTop: '12px',
+          fontSize: '11px',
+          lineHeight: 1.75,
+          color: C.sub,
+        }}
+      >
+        {t.endedSheetFooterNote}
+      </p>
+    </BottomSheet>
   );
 }
 
@@ -4726,7 +5167,13 @@ function AirportPickerSheet({ t, selected, onClose, onPick }) {
               ))}
         </div>
 
-        <div className="kaeru-pad" style={{ paddingTop: '14px', paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}>
+        <div
+          className="kaeru-pad"
+          style={{
+            paddingTop: '14px',
+            paddingBottom: 'max(28px, calc(env(safe-area-inset-bottom) + 16px))',
+          }}
+        >
           <p
             style={{
               borderTop: `1px solid ${C.ink}`,
