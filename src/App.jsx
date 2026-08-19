@@ -39,16 +39,26 @@ const STAGES = ['purchased', 'registered', 'verified', 'refunded'];
 const MAX_PHOTOS = 5; // 一張收據最多存幾張照片
 
 // 出發機場：large 的機場建議抵達時間多留 30 分鐘
+// 只放主要國際線機場，不追求完整——找不到就選「其他機場」，用預設 3 小時。
+// region 用來在選擇畫面分組，city 是機場所在城市（中文顯示），hours 是
+// 建議提早幾小時（給總覽倒數區跟出發當天流程第一條用）。
 const AIRPORTS = [
-  { code: 'NRT', name: '成田国際空港', large: true },
-  { code: 'HND', name: '羽田空港', large: true },
-  { code: 'KIX', name: '関西国際空港', large: true },
-  { code: 'NGO', name: '中部国際空港', large: true },
-  { code: 'FUK', name: '福岡空港', large: false },
-  { code: 'CTS', name: '新千歳空港', large: false },
-  { code: 'OKA', name: '那覇空港', large: false },
-  { code: 'ITM', name: '大阪国際空港（伊丹）', large: false },
+  { code: 'KIX', name: '関西国際空港', city: '大阪', region: 'kansai', hours: 3.5 },
+  { code: 'UKB', name: '神戸空港', city: '神戸', region: 'kansai', hours: 2.5 },
+  { code: 'NRT', name: '成田国際空港', city: '東京', region: 'kanto', hours: 3.5 },
+  { code: 'HND', name: '羽田空港', city: '東京', region: 'kanto', hours: 3 },
+  { code: 'NGO', name: '中部国際空港', city: '名古屋', region: 'other', hours: 3 },
+  { code: 'CTS', name: '新千歳空港', city: '札幌', region: 'other', hours: 3 },
+  { code: 'FUK', name: '福岡空港', city: '福岡', region: 'other', hours: 2.5 },
 ];
+const AIRPORT_REGIONS = ['kansai', 'kanto', 'other'];
+const DEFAULT_ARRIVE_HOURS = 3; // 選了「其他機場」或沒選，一律預設 3 小時
+
+function arriveHoursText(t, hours) {
+  const h = Math.floor(hours);
+  const half = hours - h >= 0.5;
+  return half ? `${h} ${t.hours} 30 ${t.min}` : `${h} ${t.hours}`;
+}
 
 /* 莫蘭迪色票 */
 const FONT =
@@ -82,6 +92,7 @@ const T = {
     departHint: '設定裡的起飛時間',
     days: '天',
     hours: '小時',
+    min: '分',
     setDeparture: '設定回程班機時間',
     arriveBy: '建議抵達機場',
     arriveTagPre: '建議 ',
@@ -97,7 +108,7 @@ const T = {
     emptyHome: '還沒有任何收據。買完東西就記一筆，出境前才不會漏。',
     addFirst: '新增第一張收據',
     departChecklist: '回程當天流程',
-    step1: '提早 3 小時到機場，行李先不要託運',
+    step1: (hrsText) => `提早 ${hrsText}到機場，行李先不要託運`,
     step2: '連上國際線出發大廳的專用無線網路，登入 VJW',
     step3: '在免稅手續機台掃描護照，等綠色或紅色判定',
     step4: '判定通過後再去航空公司櫃檯託運行李',
@@ -227,6 +238,14 @@ const T = {
     editTrip: '編輯行程',
     airport: '出境機場',
     airportPick: '選擇出境機場',
+    back: '返回',
+    airportSearchPh: '搜尋機場名稱或代碼',
+    airportSearchHint: '機場決定建議抵達時間：大型機場的免稅手續機台排隊較久，會多留 30 分鐘。',
+    arriveEarlyPrefix: '建議提早',
+    airportSelected: '已選',
+    airportOtherHint: '找不到你的機場也沒關係，選「其他機場」就用預設的 3 小時。',
+    airportOther: '其他機場',
+    airportRegions: { kansai: '關西', kanto: '關東', other: '中部・北海道・九州' },
     departureHint: '改了回程時間，總覽的倒數和建議抵達時間會跟著算。',
     setActiveTrip: '設為目前行程',
     setActiveTripHint: '新增收據時預設存到這趟',
@@ -338,6 +357,7 @@ const T = {
     departHint: '設定の離陸時刻',
     days: '日',
     hours: '時間',
+    min: '分',
     setDeparture: '出発時刻を設定',
     arriveBy: '空港到着の目安',
     arriveTagPre: '空港到着 ',
@@ -354,7 +374,7 @@ const T = {
       'まだレシートがありません。買ったらすぐ登録しておくと出国時に困りません。',
     addFirst: '最初のレシートを追加',
     departChecklist: '出発当日の流れ',
-    step1: '3 時間前に空港へ。荷物はまだ預けない',
+    step1: (hrsText) => `${hrsText}前に空港へ。荷物はまだ預けない`,
     step2: '国際線出発ロビーの専用無線 LAN に接続し VJW にログイン',
     step3: '免税手続用の端末でパスポートを読み取り、判定を待つ',
     step4: '判定後に航空会社カウンターで荷物を預ける',
@@ -491,6 +511,14 @@ const T = {
     editTrip: '旅程を編集',
     airport: '出発空港',
     airportPick: '出発空港を選択',
+    back: '戻る',
+    airportSearchPh: '空港名または略称で検索',
+    airportSearchHint: '空港によって到着目安が変わります。大きな空港は免税手続きの窓口が混みやすいので30分多く見ています。',
+    arriveEarlyPrefix: '目安',
+    airportSelected: '選択中',
+    airportOtherHint: '見つからなければ「その他の空港」を選べば、デフォルトの3時間で計算します。',
+    airportOther: 'その他の空港',
+    airportRegions: { kansai: '関西', kanto: '関東', other: '中部・北海道・九州' },
     departureHint: '出発時刻を変えると、ホームのカウントダウンと到着目安も一緒に変わります。',
     setActiveTrip: '現在の旅程にする',
     setActiveTripHint: 'レシート追加時のデフォルト保存先になります',
@@ -2364,7 +2392,7 @@ function HomeView({ t, stats, settings, trip, hasItems, onAdd, onGoSettings }) {
   const dHours =
     diffMs !== null ? Math.floor((diffMs % 86400000) / 3600000) : null;
   const airport = trip && trip.airport ? AIRPORTS.find((a) => a.code === trip.airport) : null;
-  const arriveBuffer = airport && airport.large ? 3.5 : 3;
+  const arriveBuffer = airport ? airport.hours : DEFAULT_ARRIVE_HOURS;
   const arriveBy = dep ? new Date(dep.getTime() - arriveBuffer * 3600000) : null;
   const fmt = (d) =>
     d
@@ -2553,7 +2581,7 @@ function HomeView({ t, stats, settings, trip, hasItems, onAdd, onGoSettings }) {
           className="mt-4"
           style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
         >
-          {[t.step1, t.step2, t.step3, t.step4].map((x, n) => (
+          {[t.step1(arriveHoursText(t, arriveBuffer)), t.step2, t.step3, t.step4].map((x, n) => (
             <li key={n} className="flex" style={{ gap: '14px' }}>
               <span
                 className="shrink-0 font-bold tabular-nums"
@@ -4408,36 +4436,154 @@ function TripEditSheet({
       </FullScreenSheet>
 
       {airportOpen && (
-        <BottomSheet onClose={() => setAirportOpen(false)}>
-          <div className="flex items-center justify-between">
-            <h2 className="font-bold" style={{ fontSize: '18px' }}>
-              {t.airport}
-            </h2>
-            <button onClick={() => setAirportOpen(false)} style={{ color: C.sub }}>
-              <X size={18} />
-            </button>
-          </div>
-          <div className="mt-3">
-            {AIRPORTS.map((a, i) => (
-              <button
-                key={a.code}
-                onClick={() => {
-                  setAirport(a.code);
-                  setAirportOpen(false);
-                }}
-                className="flex w-full items-center justify-between py-3.5 text-left"
-                style={{ borderTop: `1px solid ${i === 0 ? C.ink : C.line}` }}
-              >
-                <span style={{ fontSize: '15px', color: C.ink }}>
-                  {a.name}　{a.code}
-                </span>
-                {airport === a.code && <span style={{ color: C.blueDeep }}>✓</span>}
-              </button>
-            ))}
-          </div>
-        </BottomSheet>
+        <AirportPickerSheet
+          t={t}
+          selected={airport}
+          onClose={() => setAirportOpen(false)}
+          onPick={(code) => {
+            setAirport(code);
+            setAirportOpen(false);
+          }}
+        />
       )}
     </>
+  );
+}
+
+// 畫面36：出境機場選擇。日本機場太多，不適合塞進下拉選單，改成獨立的
+// 整頁選擇畫面：搜尋 + 依地區分組。清單只放主要國際線機場，找不到就
+// 選「其他機場」（等於不選，套用預設 3 小時）。
+function AirportPickerSheet({ t, selected, onClose, onPick }) {
+  const [query, setQuery] = useState('');
+
+  const q = query.trim().toLowerCase();
+  const matches = (a) =>
+    !q ||
+    a.name.toLowerCase().includes(q) ||
+    a.city.toLowerCase().includes(q) ||
+    a.code.toLowerCase().includes(q);
+
+  const groups = AIRPORT_REGIONS.map((region) => ({
+    region,
+    airports: AIRPORTS.filter((a) => a.region === region && matches(a)),
+  })).filter((g) => g.airports.length > 0);
+
+  return (
+    <div className="fixed inset-0 z-40 overflow-y-auto" style={{ backgroundColor: C.page, fontFamily: FONT }}>
+      <div className="kaeru-app" style={{ backgroundColor: C.page }}>
+        <div
+          className="sticky top-0 z-10 flex items-center justify-between kaeru-pad"
+          style={{
+            backgroundColor: C.page,
+            borderBottom: `1px solid ${C.ink}`,
+            paddingTop: 'max(18px, env(safe-area-inset-top))',
+            paddingBottom: '14px',
+          }}
+        >
+          <button
+            onClick={onClose}
+            className="flex items-center"
+            style={{ width: '52px', fontSize: '13px', color: C.sub }}
+          >
+            ‹ {t.back}
+          </button>
+          <span className="font-bold" style={{ fontSize: '15px', color: C.ink }}>
+            {t.airport}
+          </span>
+          <span style={{ width: '52px' }} />
+        </div>
+
+        <div className="kaeru-pad" style={{ paddingTop: '16px' }}>
+          <div
+            className="flex items-center justify-between"
+            style={{ borderBottom: `1px solid ${C.line}`, paddingBottom: '9px' }}
+          >
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t.airportSearchPh}
+              className="w-full bg-transparent outline-none"
+              style={{ border: 'none', fontSize: '15px', color: C.ink }}
+            />
+            <span style={{ fontSize: '12px', color: C.sub, flexShrink: 0 }}>⌕</span>
+          </div>
+          <p className="mt-2" style={{ fontSize: '11.5px', lineHeight: 1.75, color: C.sub }}>
+            {t.airportSearchHint}
+          </p>
+        </div>
+
+        <div className="kaeru-pad">
+          {groups.map((g) => (
+            <div key={g.region} className="mt-3.5">
+              <p
+                className="font-bold"
+                style={{ color: C.blue, fontSize: '10.5px', letterSpacing: '0.22em' }}
+              >
+                {t.airportRegions[g.region]}
+              </p>
+              {g.airports.map((a, i) => {
+                const isSel = selected === a.code;
+                return (
+                  <button
+                    key={a.code}
+                    onClick={() => onPick(a.code)}
+                    className="flex w-full items-center justify-between py-2.5 text-left"
+                    style={{ borderTop: `1px solid ${i === 0 ? C.ink : C.line}` }}
+                  >
+                    <span>
+                      <span
+                        className="block"
+                        style={{ fontSize: '14.5px', fontWeight: isSel ? 700 : 400, color: C.ink }}
+                      >
+                        {a.name}
+                      </span>
+                      <span className="mt-0.5 block" style={{ fontSize: '11px', color: C.sub }}>
+                        {a.city} · {t.arriveEarlyPrefix} {arriveHoursText(t, a.hours)}
+                      </span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2.5">
+                      <span
+                        className="tabular-nums"
+                        style={{
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          color: C.sub,
+                          letterSpacing: '0.06em',
+                        }}
+                      >
+                        {a.code}
+                      </span>
+                      {isSel && <Badge tone="blue">{t.airportSelected}</Badge>}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        <div className="kaeru-pad" style={{ paddingTop: '20px', paddingBottom: '30px' }}>
+          <p
+            style={{
+              borderTop: `1px solid ${C.ink}`,
+              paddingTop: '13px',
+              fontSize: '11.5px',
+              lineHeight: 1.8,
+              color: C.sub,
+            }}
+          >
+            {t.airportOtherHint}
+          </p>
+          <button
+            onClick={() => onPick(null)}
+            className="mt-2.5 font-semibold"
+            style={{ fontSize: '13.5px', color: C.blueDeep }}
+          >
+            {t.airportOther} ›
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
