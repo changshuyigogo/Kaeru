@@ -38,6 +38,18 @@ const photoKey = (id) => `jptax:photo:${id}`;
 const STAGES = ['purchased', 'registered', 'verified', 'refunded'];
 const MAX_PHOTOS = 5; // 一張收據最多存幾張照片
 
+// 出發機場：large 的機場建議抵達時間多留 30 分鐘
+const AIRPORTS = [
+  { code: 'NRT', name: '成田国際空港', large: true },
+  { code: 'HND', name: '羽田空港', large: true },
+  { code: 'KIX', name: '関西国際空港', large: true },
+  { code: 'NGO', name: '中部国際空港', large: true },
+  { code: 'FUK', name: '福岡空港', large: false },
+  { code: 'CTS', name: '新千歳空港', large: false },
+  { code: 'OKA', name: '那覇空港', large: false },
+  { code: 'ITM', name: '大阪国際空港（伊丹）', large: false },
+];
+
 /* 莫蘭迪色票 */
 const FONT =
   '"Noto Sans TC", "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "Microsoft JhengHei", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -138,6 +150,18 @@ const T = {
     edgeAutoOk: '邊框已自動抓好',
     ocrAmountLabel: '從照片讀到的金額',
     ocrHint: '可以直接帶入表單，之後仍可手動改',
+    reorderPhotos: '整理',
+    doneReorder: '完成',
+    addOneMore: '再加 1 張',
+    thumbHint: (n) => `點縮圖放大檢視，右上角 ✕ 刪除。最多 ${n} 張。`,
+    photoStorageNote: '照片只存在這台裝置上。刪掉收據時照片會一起刪掉。',
+    share: '分享',
+    zoomHint: '雙指縮放看細節',
+    swipeHint: '左右滑動換照片',
+    deletePhotoTitle: '刪除這張照片',
+    deletePhotoBodyMulti: (n) =>
+      `這張收據還有另外 ${n} 張照片，刪掉這張不影響金額和狀態。刪除後無法復原。`,
+    deletePhotoBodyLast: '這是最後一張照片。刪除後這張收據就沒有照片紀錄了。',
     note: '備註',
     save: '儲存',
     edit: '編輯',
@@ -200,6 +224,18 @@ const T = {
     depPrefix: '出發',
     tripPast: '過去的行程',
     tripNow: '進行中',
+    editTrip: '編輯行程',
+    airport: '出發機場',
+    airportPick: '選擇出發機場',
+    departureHint: '改了出發時間，總覽的倒數和建議抵達時間會跟著算。',
+    setActiveTrip: '設為目前行程',
+    setActiveTripHint: '新增收據時預設存到這趟',
+    tripReceiptsSection: '這趟的收據',
+    inclTotalShort: '含稅合計',
+    statusPending: '張待處理',
+    statusRefunded: '張已退款',
+    statusDead: '張失效',
+    deleteTripWarning: (n) => `刪除行程會一起刪掉這 ${n} 張收據和照片，無法復原。`,
     create: '建立',
     menu: '功能',
     pickDate: '選日期',
@@ -376,6 +412,18 @@ const T = {
     edgeAutoOk: '枠を自動検出済み',
     ocrAmountLabel: '写真から読み取った金額',
     ocrHint: 'そのままフォームに入力できます。後で手動修正も可能',
+    reorderPhotos: '並び替え',
+    doneReorder: '完了',
+    addOneMore: 'もう 1 枚追加',
+    thumbHint: (n) => `サムネイルをタップで拡大、右上の ✕ で削除。最大 ${n} 枚。`,
+    photoStorageNote: '写真はこの端末にだけ保存されます。レシートを削除すると写真も一緒に削除されます。',
+    share: '共有',
+    zoomHint: 'ピンチで拡大',
+    swipeHint: '左右にスワイプで切り替え',
+    deletePhotoTitle: 'この写真を削除',
+    deletePhotoBodyMulti: (n) =>
+      `このレシートには他に ${n} 枚の写真があります。この写真を削除しても金額やステータスに影響しません。削除後は元に戻せません。`,
+    deletePhotoBodyLast: 'これは最後の写真です。削除するとこのレシートには写真がなくなります。',
     note: 'メモ',
     save: '保存',
     edit: '編集',
@@ -440,6 +488,18 @@ const T = {
     depPrefix: '出発',
     tripPast: '過去の旅程',
     tripNow: '進行中',
+    editTrip: '旅程を編集',
+    airport: '出発空港',
+    airportPick: '出発空港を選択',
+    departureHint: '出発時刻を変えると、ホームのカウントダウンと到着目安も一緒に変わります。',
+    setActiveTrip: '現在の旅程にする',
+    setActiveTripHint: 'レシート追加時のデフォルト保存先になります',
+    tripReceiptsSection: 'この旅程のレシート',
+    inclTotalShort: '合計（税込）',
+    statusPending: '件 未処理',
+    statusRefunded: '件 返金済み',
+    statusDead: '件 失効',
+    deleteTripWarning: (n) => `旅程を削除すると、この ${n} 件のレシートと写真も一緒に削除されます。元に戻せません。`,
     create: '作成',
     menu: 'メニュー',
     pickDate: '日付を選択',
@@ -1192,6 +1252,24 @@ function rotateCanvas(src, deg) {
   return c;
 }
 
+// 放大檢視的「旋轉」要真的改到存起來的照片，不是只轉螢幕上的畫面，
+// 不然關掉再打開又轉回去，使用者會覺得沒生效。
+function rotateImageSrc(src, deg) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      c.getContext('2d').drawImage(img, 0, 0);
+      const rotated = rotateCanvas(c, deg);
+      resolve(rotated.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
 function applyContrast(canvas, amount = 35) {
   const ctx = canvas.getContext('2d');
   const { width: w, height: h } = canvas;
@@ -1730,6 +1808,7 @@ export default function App() {
   const [trips, setTrips] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [tripSheet, setTripSheet] = useState(false);
+  const [editingTripId, setEditingTripId] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [tab, setTab] = useState('home');
   const [editing, setEditing] = useState(null);
@@ -1837,6 +1916,38 @@ export default function App() {
     )
       return Number(it.taxOverride) || 0;
     return (it.incl || 0) - netOfItem(it);
+  }
+
+  function deleteTrip(id) {
+    const rest = trips.filter((x) => x.id !== id);
+    items
+      .filter((i) => i.tripId === id)
+      .forEach((i) => {
+        window.storage.delete(photoKey(i.id)).catch(() => {});
+      });
+    setPhotos((p) => {
+      const n = { ...p };
+      for (const i of items) if (i.tripId === id) delete n[i.id];
+      return n;
+    });
+    setItems((prev) => prev.filter((i) => i.tripId !== id));
+    setTrips(rest);
+    if (activeId === id) setActiveId(rest.length ? rest[0].id : null);
+  }
+
+  function tripStatsFor(id) {
+    const list = items.filter((i) => i.tripId === id);
+    let totalIncl = 0,
+      pending = 0,
+      refunded = 0,
+      dead = 0;
+    for (const it of list) {
+      totalIncl += it.incl || 0;
+      if (it.consumed) dead++;
+      else if (it.status === 'refunded') refunded++;
+      else pending++;
+    }
+    return { count: list.length, totalIncl, pending, refunded, dead };
   }
 
   const stats = useMemo(() => {
@@ -2149,12 +2260,7 @@ export default function App() {
               setSettings={setSettings}
               trip={activeTrip}
               count={tripItems.length}
-              onTripChange={(patch) =>
-                setTrips((prev) =>
-                  prev.map((x) => (x.id === activeId ? { ...x, ...patch } : x)),
-                )
-              }
-              onOpenTrips={() => setTripSheet(true)}
+              onEditTrip={() => setEditingTripId(activeId)}
               onFetchRate={fetchRate}
               rateBusy={rateBusy}
               rateErr={rateErr}
@@ -2184,16 +2290,28 @@ export default function App() {
             setActiveId(id);
             setTripSheet(false);
           }}
-          onDelete={(id) => {
-            const rest = trips.filter((x) => x.id !== id);
-            items
-              .filter((i) => i.tripId === id)
-              .forEach((i) => {
-                window.storage.delete(photoKey(i.id)).catch(() => {});
-              });
-            setItems((prev) => prev.filter((i) => i.tripId !== id));
-            setTrips(rest);
-            if (activeId === id) setActiveId(rest.length ? rest[0].id : null);
+          onDelete={deleteTrip}
+          onEditTrip={(id) => setEditingTripId(id)}
+        />
+      )}
+
+      {editingTripId && (
+        <TripEditSheet
+          t={t}
+          trip={trips.find((x) => x.id === editingTripId)}
+          isActive={editingTripId === activeId}
+          tripStats={tripStatsFor(editingTripId)}
+          onClose={() => setEditingTripId(null)}
+          onSave={(patch, makeActive) => {
+            setTrips((prev) =>
+              prev.map((x) => (x.id === editingTripId ? { ...x, ...patch } : x)),
+            );
+            if (makeActive) setActiveId(editingTripId);
+            setEditingTripId(null);
+          }}
+          onDelete={() => {
+            deleteTrip(editingTripId);
+            setEditingTripId(null);
           }}
         />
       )}
@@ -2217,6 +2335,7 @@ export default function App() {
           item={openItem}
           group={groups.get(groupKey(openItem))}
           photos={photos[openItem.id] || []}
+          onPhotosChange={(next) => upsert(openItem, next)}
           taxOf={taxOf}
           settings={settings}
           onClose={() => setOpenId(null)}
@@ -2244,7 +2363,9 @@ function HomeView({ t, stats, settings, trip, hasItems, onAdd, onGoSettings }) {
   const dDays = diffMs !== null ? Math.floor(diffMs / 86400000) : null;
   const dHours =
     diffMs !== null ? Math.floor((diffMs % 86400000) / 3600000) : null;
-  const arriveBy = dep ? new Date(dep.getTime() - 3 * 3600000) : null;
+  const airport = trip && trip.airport ? AIRPORTS.find((a) => a.code === trip.airport) : null;
+  const arriveBuffer = airport && airport.large ? 3.5 : 3;
+  const arriveBy = dep ? new Date(dep.getTime() - arriveBuffer * 3600000) : null;
   const fmt = (d) =>
     d
       ? `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
@@ -3524,8 +3645,7 @@ function SettingsView({
   setSettings,
   trip,
   count,
-  onTripChange,
-  onOpenTrips,
+  onEditTrip,
   onFetchRate,
   rateBusy,
   rateErr,
@@ -3549,7 +3669,7 @@ function SettingsView({
 
   return (
     <div className="pb-6 pt-2">
-      <button onClick={onOpenTrips} style={rowStyle(true)}>
+      <button onClick={onEditTrip} style={rowStyle(true)}>
         <span className="block" style={labelStyle}>
           {t.trips}
         </span>
@@ -3568,21 +3688,6 @@ function SettingsView({
           </span>
         </span>
       </button>
-
-      <div style={rowStyle(false)}>
-        <span className="block" style={labelStyle}>
-          {t.departure}
-        </span>
-        <div className="mt-2">
-          <DateField
-            withTime
-            value={(trip && trip.departure) || ''}
-            onChange={(v) => onTripChange({ departure: v })}
-            t={t}
-            fontSize="17px"
-          />
-        </div>
-      </div>
 
       <div style={rowStyle(false)}>
         <div className="flex items-baseline justify-between gap-2">
@@ -3910,6 +4015,7 @@ function TripSheet({
   onSelect,
   onCreate,
   onDelete,
+  onEditTrip,
 }) {
   const [name, setName] = useState('');
   const [departure, setDeparture] = useState('');
@@ -3936,18 +4042,23 @@ function TripSheet({
 
       {active && (
         <div style={{ borderTop: `1px solid ${C.ink}`, paddingTop: '14px' }}>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="font-bold" style={{ fontSize: '17px' }}>
-              {active.name || t.tripNow}
-            </span>
-            <Badge tone="blue">{t.tripNow}</Badge>
-          </div>
-          <p className="mt-1.5" style={{ color: C.sub, fontSize: '11.5px' }}>
-            {countOf(active.id)} {t.tripReceipts}
-            {active.departure
-              ? ` · ${t.depPrefix} ${fmtDep(active.departure)}`
-              : ` · ${t.noDeparture}`}
-          </p>
+          <button
+            className="block w-full text-left"
+            onClick={() => onEditTrip(active.id)}
+          >
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="font-bold" style={{ fontSize: '17px' }}>
+                {active.name || t.tripNow}
+              </span>
+              <Badge tone="blue">{t.tripNow}</Badge>
+            </div>
+            <p className="mt-1.5" style={{ color: C.sub, fontSize: '11.5px' }}>
+              {countOf(active.id)} {t.tripReceipts}
+              {active.departure
+                ? ` · ${t.depPrefix} ${fmtDep(active.departure)}`
+                : ` · ${t.noDeparture}`}
+            </p>
+          </button>
 
           {trips.length > 1 &&
             (confirmId === active.id ? (
@@ -4023,7 +4134,10 @@ function TripSheet({
                 className="flex items-baseline justify-between gap-3 py-3"
                 style={idx > 0 ? { borderTop: `1px solid ${C.line}` } : {}}
               >
-                <div className="min-w-0">
+                <button
+                  className="min-w-0 text-left"
+                  onClick={() => onEditTrip(trip.id)}
+                >
                   <p className="truncate" style={{ fontSize: '15px' }}>
                     {trip.name || t.tripNow}
                   </p>
@@ -4035,7 +4149,7 @@ function TripSheet({
                     {trip.departure &&
                       ` · ${t.depPrefix} ${fmtDep(trip.departure)}`}
                   </p>
-                </div>
+                </button>
                 <button
                   onClick={() => onSelect(trip.id)}
                   className="shrink-0"
@@ -4094,62 +4208,254 @@ function TripSheet({
   );
 }
 
-function EditSheet({ t, initial, photos, onClose, onSave }) {
-  const [shop, setShop] = useState(initial?.shop || '');
-  const [date, setDate] = useState(initial?.date || todayStr());
-  const [incl, setIncl] = useState(initial?.incl ?? '');
-  const [incl8, setIncl8] = useState(initial?.incl8 ?? '');
-  const [incl10, setIncl10] = useState(initial?.incl10 ?? '');
-  const [rate, setRate] = useState(initial?.rate ?? 10);
-  const [taxOverride, setTaxOverride] = useState(
-    initial?.taxOverride === null || initial?.taxOverride === undefined
-      ? ''
-      : initial.taxOverride,
+// 編輯行程：行程名稱／出發時間／出發機場／設為目前行程／這趟的收據統計／刪除行程
+function TripEditSheet({
+  t,
+  trip,
+  isActive,
+  tripStats,
+  onClose,
+  onSave,
+  onDelete,
+}) {
+  const [name, setName] = useState(trip.name || '');
+  const [departure, setDeparture] = useState(trip.departure || '');
+  const [airport, setAirport] = useState(trip.airport || '');
+  const [setActive, setSetActive] = useState(isActive);
+  const [airportOpen, setAirportOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const airportInfo = AIRPORTS.find((a) => a.code === airport);
+
+  function save() {
+    onSave({ name: name.trim(), departure, airport: airport || null }, setActive);
+  }
+
+  return (
+    <>
+      <FullScreenSheet>
+        <div
+          className="sticky top-0 z-10 flex items-center justify-between kaeru-pad"
+          style={{
+            backgroundColor: C.page,
+            borderBottom: `1px solid ${C.ink}`,
+            paddingTop: 'max(16px, env(safe-area-inset-top))',
+            paddingBottom: '16px',
+          }}
+        >
+          <button onClick={onClose} style={{ fontSize: '15px', color: C.sub }}>
+            {t.cancel}
+          </button>
+          <h2 className="font-bold" style={{ fontSize: '15px' }}>
+            {t.editTrip}
+          </h2>
+          <button
+            onClick={save}
+            className="font-bold"
+            style={{ fontSize: '15px', color: C.blueDeep }}
+          >
+            {t.save}
+          </button>
+        </div>
+
+        <div className="kaeru-pad py-6" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <Field label={t.tripName}>
+            <Input
+              value={name}
+              placeholder={t.tripNamePh}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </Field>
+
+          <div>
+            <Field label={t.departure}>
+              <DateField withTime value={departure} onChange={setDeparture} t={t} fontSize="16px" />
+            </Field>
+            <p className="mt-2" style={{ color: C.sub, fontSize: '11.5px', lineHeight: 1.6 }}>
+              {t.departureHint}
+            </p>
+          </div>
+
+          <button
+            onClick={() => setAirportOpen(true)}
+            className="block w-full text-left"
+            style={{ borderBottom: `1px solid ${C.line}`, paddingBottom: '10px' }}
+          >
+            <span
+              className="block font-bold"
+              style={{ color: C.blue, fontSize: '10.5px', letterSpacing: '0.22em' }}
+            >
+              {t.airport}
+            </span>
+            <span className="mt-2 flex items-center justify-between gap-2">
+              <span style={{ fontSize: '16px', color: airportInfo ? C.ink : C.sub }}>
+                {airportInfo ? `${airportInfo.name}　${airportInfo.code}` : t.airportPick}
+              </span>
+              <ChevronRight size={16} style={{ color: C.sub, flexShrink: 0 }} />
+            </span>
+          </button>
+
+          <button
+            onClick={() => setSetActive((v) => !v)}
+            className="flex w-full items-center justify-between gap-3 text-left"
+          >
+            <span>
+              <span className="block" style={{ fontSize: '15px', color: C.ink }}>
+                {t.setActiveTrip}
+              </span>
+              <span className="mt-0.5 block" style={{ fontSize: '11.5px', color: C.sub }}>
+                {t.setActiveTripHint}
+              </span>
+            </span>
+            <span
+              className="relative shrink-0"
+              style={{
+                width: '34px',
+                height: '18px',
+                backgroundColor: setActive ? C.blue : C.line,
+              }}
+            >
+              <span
+                className="absolute transition-transform"
+                style={{
+                  top: '2px',
+                  left: '2px',
+                  width: '14px',
+                  height: '14px',
+                  backgroundColor: '#FFFFFF',
+                  transform: setActive ? 'translateX(16px)' : 'none',
+                }}
+              />
+            </span>
+          </button>
+
+          <div style={{ borderTop: `1px solid ${C.ink}`, paddingTop: '18px' }}>
+            <p
+              className="font-bold"
+              style={{ color: C.blue, fontSize: '10.5px', letterSpacing: '0.22em' }}
+            >
+              {t.tripReceiptsSection}
+            </p>
+            <div className="mt-3 flex items-baseline justify-between gap-2">
+              <span style={{ fontSize: '15px', color: C.ink }}>
+                {tripStats.count} {t.itemsUnit} · {t.inclTotalShort}
+              </span>
+              <span className="font-semibold tabular-nums" style={{ fontSize: '18px', color: C.ink }}>
+                ¥{yen(tripStats.totalIncl)}
+              </span>
+            </div>
+            {tripStats.count > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {tripStats.pending > 0 && (
+                  <Badge tone="blue">{tripStats.pending}{t.statusPending}</Badge>
+                )}
+                {tripStats.refunded > 0 && (
+                  <Badge tone="sage">{tripStats.refunded}{t.statusRefunded}</Badge>
+                )}
+                {tripStats.dead > 0 && (
+                  <Badge tone="clay">{tripStats.dead}{t.statusDead}</Badge>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: '18px' }}>
+            {confirmDelete ? (
+              <div style={{ backgroundColor: C.soft, borderLeft: `3px solid ${C.clay}`, padding: '12px 14px' }}>
+                <p style={{ color: C.clayInk, fontSize: '12.5px', lineHeight: 1.7 }}>
+                  {t.deleteTripWarning(tripStats.count)}
+                </p>
+                <div className="mt-2.5 flex gap-2">
+                  <button
+                    onClick={onDelete}
+                    className="px-3 py-1.5 text-xs font-medium"
+                    style={{ backgroundColor: C.clay, color: '#FFFFFF' }}
+                  >
+                    {t.tripDelete}
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(false)}
+                    className="px-3 py-1.5 text-xs"
+                    style={{ border: `1px solid ${C.line}`, color: C.ink }}
+                  >
+                    {t.cancel}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <p style={{ color: C.sub, fontSize: '12px', lineHeight: 1.8 }}>
+                  {t.deleteTripWarning(tripStats.count)}
+                </p>
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="mt-2"
+                  style={{
+                    color: C.clayInk,
+                    fontSize: '15px',
+                    borderBottom: `1px solid ${C.clay}`,
+                    paddingBottom: '2px',
+                  }}
+                >
+                  {t.tripDelete}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </FullScreenSheet>
+
+      {airportOpen && (
+        <BottomSheet onClose={() => setAirportOpen(false)}>
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold" style={{ fontSize: '18px' }}>
+              {t.airport}
+            </h2>
+            <button onClick={() => setAirportOpen(false)} style={{ color: C.sub }}>
+              <X size={18} />
+            </button>
+          </div>
+          <div className="mt-3">
+            {AIRPORTS.map((a, i) => (
+              <button
+                key={a.code}
+                onClick={() => {
+                  setAirport(a.code);
+                  setAirportOpen(false);
+                }}
+                className="flex w-full items-center justify-between py-3.5 text-left"
+                style={{ borderTop: `1px solid ${i === 0 ? C.ink : C.line}` }}
+              >
+                <span style={{ fontSize: '15px', color: C.ink }}>
+                  {a.name}　{a.code}
+                </span>
+                {airport === a.code && <span style={{ color: C.blueDeep }}>✓</span>}
+              </button>
+            ))}
+          </div>
+        </BottomSheet>
+      )}
+    </>
   );
-  const [refundReg, setRefundReg] = useState(
-    initial ? STAGES.indexOf(initial.status) >= 1 : false,
-  );
-  const [unpacked, setUnpacked] = useState(initial?.unpacked || false);
-  const [consumed, setConsumed] = useState(initial?.consumed || false);
-  const [note, setNote] = useState(initial?.note || '');
-  const [imgs, setImgs] = useState(photos || []);
+}
+
+// 「拍照／從相簿選／掃描文件」整套流程的共用邏輯，EditSheet 跟 DetailSheet
+// 都要能加照片，抽成 hook 避免兩邊各刻一份。setImgs 吃 functional updater
+// （跟 useState 的 setter 同介面），EditSheet 傳真的 setState，DetailSheet
+// 傳一個包了 onPhotosChange 的 wrapper（因為 DetailSheet 沒有「儲存」按鈕，
+// 加/刪照片要立刻生效、直接寫回上層）。
+function usePhotoCapture({ imgs, setImgs, onParsed }) {
   const [photoPromptOpen, setPhotoPromptOpen] = useState(false);
   const [photoDenied, setPhotoDenied] = useState(null); // null | 'camera' | 'photos'
   const [confirmPhoto, setConfirmPhoto] = useState(null); // { src, fromScan } | null
   const fileRef = useRef(null);
-
-  const mixed = rate === 'mixed';
-  const v8 = Number(incl8) || 0;
-  const v10 = Number(incl10) || 0;
-  const incl8Filled = incl8 !== '' && incl8 !== null;
-  const incl10Filled = incl10 !== '' && incl10 !== null;
-  const net8 = netOf(v8, 8);
-  const net10 = netOf(v10, 10);
-  const tax8 = v8 - net8;
-  const tax10 = v10 - net10;
-  const singleNet = netOf(Number(incl) || 0, mixed ? 10 : rate);
-  const singleAutoTax = (Number(incl) || 0) - singleNet;
-  const net = mixed ? net8 + net10 : singleNet;
-  const autoTax = mixed ? tax8 + tax10 : singleAutoTax;
-  const effectiveIncl = mixed ? v8 + v10 : Number(incl) || 0;
-  const bothFilled = incl8Filled && incl10Filled;
-  const showPartialWarn = mixed && incl8Filled !== incl10Filled;
-  // 稅抜合計對 5,000 円門檻的即時判定：達標用 sage，未達用 clay + 還差多少
-  const metThreshold = net >= 5000;
-  const thresholdText = metThreshold
-    ? t.reached
-    : `${t.notReached} · ${t.short} ¥${yen(5000 - net)}`;
-  const thresholdColor = metThreshold ? C.sage : C.clay;
-
-  function pickRate(r) {
-    if (r !== 'mixed' && mixed) {
-      // 從混合切回單一：兩格加總帶回含稅金額，兩格本身不清空
-      setIncl(v8 + v10 ? String(v8 + v10) : '');
-    }
-    setRate(r);
-  }
-
   const remaining = MAX_PHOTOS - imgs.length;
+
+  function isPermissionDenied(err) {
+    if (!err) return false;
+    const msg = String(err.message || err.code || '').toLowerCase();
+    return msg.includes('permission') || msg.includes('denied');
+  }
 
   async function onPick(e) {
     const f = e.target.files && e.target.files[0];
@@ -4171,18 +4477,6 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
     fileRef.current && fileRef.current.click();
   }
 
-  function isPermissionDenied(err) {
-    // 自建的 ReceiptScanner plugin 固定 reject "permission_denied"；
-    // @capacitor/camera 官方外掛的措辭不固定（各平台文字不同），寬鬆比對關鍵字。
-    if (!err) return false;
-    const msg = String(err.message || err.code || '').toLowerCase();
-    return msg.includes('permission') || msg.includes('denied');
-  }
-
-  // 原生殼上不用系統內建的選單（樣式跟語言都套不進 app 自己的視覺語言），
-  // 改用一個自己畫的底部選單。拍照走系統相機（只拍一張，先進確認/裁切畫面）；
-  // 從相簿選走系統原生多選（PHPicker／Android 相片選擇器），選完直接壓縮加入；
-  // 掃描文件走自建的原生外掛（系統文件掃描器），第一頁進確認畫面，其餘直接加入。
   async function openCamera() {
     setPhotoPromptOpen(false);
     try {
@@ -4232,14 +4526,160 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
       }
     } catch (err) {
       if (isPermissionDenied(err)) setPhotoDenied('camera');
-      // 使用者取消掃描時也會 reject，忽略即可
     }
   }
 
   function finishConfirm(src, parsed) {
     setConfirmPhoto(null);
     if (src) setImgs((p) => (p.length < MAX_PHOTOS ? [...p, src] : p));
-    if (parsed) {
+    if (parsed && onParsed) onParsed(parsed);
+  }
+
+  function removeImg(idx) {
+    setImgs((p) => p.filter((_, i) => i !== idx));
+  }
+
+  return {
+    photoPromptOpen,
+    setPhotoPromptOpen,
+    photoDenied,
+    confirmPhoto,
+    fileRef,
+    remaining,
+    onPick,
+    pickPhoto,
+    openCamera,
+    openLibrary,
+    openScan,
+    finishConfirm,
+    removeImg,
+  };
+}
+
+// 共用的「來源選擇面板」＋「確認/裁切畫面」，接 usePhotoCapture 回傳的 cap。
+function PhotoCaptureSheets({ t, cap }) {
+  return (
+    <>
+      {cap.photoPromptOpen && (
+        <BottomSheet onClose={() => cap.setPhotoPromptOpen(false)}>
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold" style={{ fontSize: '18px' }}>
+              {t.photo}
+            </h2>
+            <button onClick={() => cap.setPhotoPromptOpen(false)} style={{ color: C.sub }}>
+              <X size={18} />
+            </button>
+          </div>
+          <p className="mt-1.5" style={{ color: C.sub, fontSize: '11.5px' }}>
+            {t.photoSheetSub}
+          </p>
+          <div className="mt-3">
+            {[
+              { label: t.takePhotoOption, hint: t.takePhotoHint, onClick: cap.openCamera },
+              { label: t.chooseFromLibrary, hint: t.libraryHint, onClick: cap.openLibrary },
+              { label: t.scanDoc, hint: t.scanDocHint, onClick: cap.openScan },
+            ].map((opt, i) => (
+              <button
+                key={opt.label}
+                onClick={opt.onClick}
+                className="flex w-full items-center justify-between py-4 text-left"
+                style={{ borderTop: `1px solid ${i === 0 ? C.ink : C.line}` }}
+              >
+                <span>
+                  <span className="block font-bold" style={{ fontSize: '15px', color: C.ink }}>
+                    {opt.label}
+                  </span>
+                  <span className="block" style={{ fontSize: '11.5px', color: C.sub }}>
+                    {opt.hint}
+                  </span>
+                </span>
+                <ChevronRight size={14} style={{ color: C.sub, flexShrink: 0 }} />
+              </button>
+            ))}
+          </div>
+          <div className="mt-1 flex justify-center py-3" style={{ borderTop: `1px solid ${C.ink}` }}>
+            <button
+              onClick={() => cap.setPhotoPromptOpen(false)}
+              className="font-semibold"
+              style={{ color: C.sub, fontSize: '13.5px' }}
+            >
+              {t.cancel}
+            </button>
+          </div>
+        </BottomSheet>
+      )}
+
+      {cap.confirmPhoto && (
+        <PhotoConfirmSheet
+          t={t}
+          src={cap.confirmPhoto.src}
+          fromScan={cap.confirmPhoto.fromScan}
+          onRetake={() => {
+            cap.finishConfirm(null);
+            cap.pickPhoto();
+          }}
+          onUse={cap.finishConfirm}
+        />
+      )}
+    </>
+  );
+}
+
+function EditSheet({ t, initial, photos, onClose, onSave }) {
+  const [shop, setShop] = useState(initial?.shop || '');
+  const [date, setDate] = useState(initial?.date || todayStr());
+  const [incl, setIncl] = useState(initial?.incl ?? '');
+  const [incl8, setIncl8] = useState(initial?.incl8 ?? '');
+  const [incl10, setIncl10] = useState(initial?.incl10 ?? '');
+  const [rate, setRate] = useState(initial?.rate ?? 10);
+  const [taxOverride, setTaxOverride] = useState(
+    initial?.taxOverride === null || initial?.taxOverride === undefined
+      ? ''
+      : initial.taxOverride,
+  );
+  const [refundReg, setRefundReg] = useState(
+    initial ? STAGES.indexOf(initial.status) >= 1 : false,
+  );
+  const [unpacked, setUnpacked] = useState(initial?.unpacked || false);
+  const [consumed, setConsumed] = useState(initial?.consumed || false);
+  const [note, setNote] = useState(initial?.note || '');
+  const [imgs, setImgs] = useState(photos || []);
+
+  const mixed = rate === 'mixed';
+  const v8 = Number(incl8) || 0;
+  const v10 = Number(incl10) || 0;
+  const incl8Filled = incl8 !== '' && incl8 !== null;
+  const incl10Filled = incl10 !== '' && incl10 !== null;
+  const net8 = netOf(v8, 8);
+  const net10 = netOf(v10, 10);
+  const tax8 = v8 - net8;
+  const tax10 = v10 - net10;
+  const singleNet = netOf(Number(incl) || 0, mixed ? 10 : rate);
+  const singleAutoTax = (Number(incl) || 0) - singleNet;
+  const net = mixed ? net8 + net10 : singleNet;
+  const autoTax = mixed ? tax8 + tax10 : singleAutoTax;
+  const effectiveIncl = mixed ? v8 + v10 : Number(incl) || 0;
+  const bothFilled = incl8Filled && incl10Filled;
+  const showPartialWarn = mixed && incl8Filled !== incl10Filled;
+  // 稅抜合計對 5,000 円門檻的即時判定：達標用 sage，未達用 clay + 還差多少
+  const metThreshold = net >= 5000;
+  const thresholdText = metThreshold
+    ? t.reached
+    : `${t.notReached} · ${t.short} ¥${yen(5000 - net)}`;
+  const thresholdColor = metThreshold ? C.sage : C.clay;
+
+  function pickRate(r) {
+    if (r !== 'mixed' && mixed) {
+      // 從混合切回單一：兩格加總帶回含稅金額，兩格本身不清空
+      setIncl(v8 + v10 ? String(v8 + v10) : '');
+    }
+    setRate(r);
+  }
+
+  const cap = usePhotoCapture({
+    imgs,
+    setImgs,
+    onParsed: (parsed) => {
       if (parsed.shop && !shop.trim()) setShop(parsed.shop);
       if (parsed.date) setDate(parsed.date);
       if (parsed.rate === 'mixed') {
@@ -4250,12 +4690,8 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
         setRate(parsed.rate);
         setIncl(String(parsed.incl));
       }
-    }
-  }
-
-  function removeImg(idx) {
-    setImgs((p) => p.filter((_, i) => i !== idx));
-  }
+    },
+  });
 
   function save() {
     const id =
@@ -4683,7 +5119,7 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
                     style={{ height: '74px', border: `1px solid ${C.line}` }}
                   />
                   <button
-                    onClick={() => removeImg(i)}
+                    onClick={() => cap.removeImg(i)}
                     className="mt-1 flex w-full items-center justify-center gap-1"
                     style={{ color: C.clayInk, fontSize: '11px', padding: '2px 0' }}
                   >
@@ -4692,9 +5128,9 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
                   </button>
                 </div>
               ))}
-              {remaining > 0 && (
+              {cap.remaining > 0 && (
                 <button
-                  onClick={pickPhoto}
+                  onClick={cap.pickPhoto}
                   className="flex items-center justify-center"
                   style={{
                     width: '74px',
@@ -4707,9 +5143,9 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
                 </button>
               )}
             </div>
-          ) : photoDenied ? (
+          ) : cap.photoDenied ? (
             <p style={{ color: C.sub, fontSize: '13px', lineHeight: 1.8 }}>
-              {photoDenied === 'camera' ? t.cameraDenied : t.photoDenied}
+              {cap.photoDenied === 'camera' ? t.cameraDenied : t.photoDenied}
               {'　'}
               <button
                 onClick={() => ReceiptScanner.openAppSettings().catch(() => {})}
@@ -4720,7 +5156,7 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
             </p>
           ) : (
             <button
-              onClick={pickPhoto}
+              onClick={cap.pickPhoto}
               className="flex w-full items-center justify-center text-sm"
               style={{
                 border: `1px dashed ${C.line}`,
@@ -4732,11 +5168,11 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
             </button>
           )}
           <input
-            ref={fileRef}
+            ref={cap.fileRef}
             type="file"
             accept="image/*"
             capture="environment"
-            onChange={onPick}
+            onChange={cap.onPick}
             className="hidden"
           />
         </Field>
@@ -4747,77 +5183,7 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
       </div>
     </FullScreenSheet>
 
-    {photoPromptOpen && (
-      <BottomSheet onClose={() => setPhotoPromptOpen(false)}>
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold" style={{ fontSize: '18px' }}>
-            {t.photo}
-          </h2>
-          <button onClick={() => setPhotoPromptOpen(false)} style={{ color: C.sub }}>
-            <X size={18} />
-          </button>
-        </div>
-        <p className="mt-1.5" style={{ color: C.sub, fontSize: '11.5px' }}>
-          {t.photoSheetSub}
-        </p>
-        <div className="mt-3">
-          {[
-            { label: t.takePhotoOption, hint: t.takePhotoHint, onClick: openCamera },
-            {
-              label: t.chooseFromLibrary,
-              hint: t.libraryHint,
-              onClick: openLibrary,
-            },
-            { label: t.scanDoc, hint: t.scanDocHint, onClick: openScan },
-          ].map((opt, i) => (
-            <button
-              key={opt.label}
-              onClick={opt.onClick}
-              className="flex w-full items-center justify-between py-4 text-left"
-              style={{ borderTop: `1px solid ${i === 0 ? C.ink : C.line}` }}
-            >
-              <span>
-                <span
-                  className="block font-bold"
-                  style={{ fontSize: '15px', color: C.ink }}
-                >
-                  {opt.label}
-                </span>
-                <span className="block" style={{ fontSize: '11.5px', color: C.sub }}>
-                  {opt.hint}
-                </span>
-              </span>
-              <ChevronRight size={14} style={{ color: C.sub, flexShrink: 0 }} />
-            </button>
-          ))}
-        </div>
-        <div
-          className="mt-1 flex justify-center py-3"
-          style={{ borderTop: `1px solid ${C.ink}` }}
-        >
-          <button
-            onClick={() => setPhotoPromptOpen(false)}
-            className="font-semibold"
-            style={{ color: C.sub, fontSize: '13.5px' }}
-          >
-            {t.cancel}
-          </button>
-        </div>
-      </BottomSheet>
-    )}
-
-    {confirmPhoto && (
-      <PhotoConfirmSheet
-        t={t}
-        src={confirmPhoto.src}
-        fromScan={confirmPhoto.fromScan}
-        onRetake={() => {
-          setConfirmPhoto(null);
-          pickPhoto();
-        }}
-        onUse={finishConfirm}
-      />
-    )}
+    <PhotoCaptureSheets t={t} cap={cap} />
     </>
   );
 }
@@ -5116,6 +5482,7 @@ function DetailSheet({
   item,
   group,
   photos,
+  onPhotosChange,
   taxOf,
   settings,
   onClose,
@@ -5130,6 +5497,52 @@ function DetailSheet({
   const blocked = dead || !groupOk;
   const cur = STAGES.indexOf(item.status);
   const refunded = item.status === 'refunded';
+  const [reorderMode, setReorderMode] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(null);
+  const [dragState, setDragState] = useState(null); // { from, dx } | null
+  const cap = usePhotoCapture({ imgs: photos, setImgs: (updater) => onPhotosChange(typeof updater === 'function' ? updater(photos) : updater) });
+
+  function movePhoto(from, to) {
+    if (from === to) return;
+    const next = [...photos];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    onPhotosChange(next);
+  }
+
+  // 整理模式：拖曳靠 pointer event 手動算位移，不用 HTML5 native drag（手機
+  // 觸控對 native drag 支援很差）。每格寬度固定（72px縮圖 + 8px間距），
+  // 拖曳超過半格寬就跟旁邊那格交換，鬆手時位置已經是最終結果。
+  const THUMB_STEP = 80;
+  function onThumbPointerDown(i) {
+    return (e) => {
+      e.preventDefault();
+      const startX = (e.touches ? e.touches[0] : e).clientX;
+      let current = i;
+      const move = (ev) => {
+        const p = ev.touches ? ev.touches[0] : ev;
+        const dx = p.clientX - startX;
+        setDragState({ from: i, dx });
+        const shift = Math.round(dx / THUMB_STEP);
+        const target = Math.max(0, Math.min(photos.length - 1, i + shift));
+        if (target !== current) {
+          movePhoto(current, target);
+          current = target;
+        }
+      };
+      const up = () => {
+        setDragState(null);
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        window.removeEventListener('touchmove', move);
+        window.removeEventListener('touchend', up);
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+      window.addEventListener('touchmove', move, { passive: false });
+      window.addEventListener('touchend', up);
+    };
+  }
   const fmtShort = (iso) => {
     const dt = new Date(iso + 'T00:00:00');
     return `${dt.getMonth() + 1}/${dt.getDate()}`;
@@ -5140,6 +5553,7 @@ function DetailSheet({
   };
 
   return (
+    <>
     <FullScreenSheet>
       <div
         className="sticky top-0 z-10 flex items-center justify-between kaeru-pad"
@@ -5435,39 +5849,425 @@ function DetailSheet({
 
         {!dead && (
           <div className="mt-6">
-            <p
-              className="font-bold"
-              style={{
-                color: C.blue,
-                fontSize: '10.5px',
-                letterSpacing: '0.22em',
-              }}
-            >
-              {t.photo}
-            </p>
-            {photos && photos.length ? (
-              <div className="mt-2 flex gap-2 overflow-x-auto">
-                {photos.map((src, i) => (
-                  <div
-                    key={i}
-                    className="flex shrink-0 items-center justify-center"
-                    style={{ backgroundColor: C.soft, height: '96px', width: '96px' }}
-                  >
-                    <img src={src} alt="" className="h-full w-full object-cover" />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div
-                className="mt-2 flex items-center justify-center"
-                style={{ backgroundColor: C.soft, height: '96px' }}
+            <div className="flex items-center justify-between">
+              <p
+                className="font-bold"
+                style={{ color: C.blue, fontSize: '10.5px', letterSpacing: '0.22em' }}
               >
-                <span style={{ color: C.sub, fontSize: '13px' }}>{t.photo}</span>
-              </div>
+                {t.photo}
+              </p>
+              {photos.length > 1 && (
+                <button
+                  onClick={() => setReorderMode((v) => !v)}
+                  className="font-semibold"
+                  style={{ color: C.blueDeep, fontSize: '11.5px' }}
+                >
+                  {reorderMode ? t.doneReorder : t.reorderPhotos}
+                </button>
+              )}
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {photos.map((src, i) => (
+                <div
+                  key={i}
+                  onPointerDown={reorderMode ? onThumbPointerDown(i) : undefined}
+                  onTouchStart={reorderMode ? onThumbPointerDown(i) : undefined}
+                  onClick={() => !reorderMode && setLightboxIndex(i)}
+                  className="relative shrink-0"
+                  style={{
+                    width: '72px',
+                    height: '96px',
+                    backgroundColor: C.soft,
+                    border: `1px solid ${C.line}`,
+                    touchAction: reorderMode ? 'none' : 'auto',
+                    cursor: reorderMode ? 'grab' : 'pointer',
+                    transform:
+                      dragState && dragState.from === i
+                        ? `translateX(${dragState.dx}px)`
+                        : 'none',
+                    zIndex: dragState && dragState.from === i ? 10 : 1,
+                  }}
+                >
+                  <img src={src} alt="" className="h-full w-full object-cover" />
+                  <span
+                    className="absolute bottom-1 left-1 tabular-nums"
+                    style={{ fontSize: '9.5px', color: C.sub }}
+                  >
+                    {String(i + 1).padStart(2, '0')}
+                  </span>
+                  {!reorderMode && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        cap.removeImg(i);
+                      }}
+                      className="absolute flex items-center justify-center"
+                      style={{
+                        top: '-1px',
+                        right: '-1px',
+                        width: '44px',
+                        height: '44px',
+                        marginTop: '-12px',
+                        marginRight: '-12px',
+                        paddingBottom: '12px',
+                        paddingLeft: '12px',
+                      }}
+                    >
+                      <span
+                        className="flex items-center justify-center"
+                        style={{
+                          width: '20px',
+                          height: '20px',
+                          backgroundColor: C.ink,
+                          color: '#FFFFFF',
+                        }}
+                      >
+                        <X size={12} />
+                      </span>
+                    </button>
+                  )}
+                </div>
+              ))}
+              {photos.length < MAX_PHOTOS && (
+                <button
+                  onClick={cap.pickPhoto}
+                  className="flex shrink-0 flex-col items-center justify-center gap-1"
+                  style={{ width: '72px', height: '96px', border: `1px dashed ${C.line}`, color: C.sub }}
+                >
+                  <Plus size={16} />
+                  <span style={{ fontSize: '9.5px' }}>{t.addOneMore}</span>
+                </button>
+              )}
+            </div>
+
+            {cap.photoDenied ? (
+              <p className="mt-2" style={{ color: C.sub, fontSize: '11.5px', lineHeight: 1.7 }}>
+                {cap.photoDenied === 'camera' ? t.cameraDenied : t.photoDenied}
+                {'　'}
+                <button
+                  onClick={() => ReceiptScanner.openAppSettings().catch(() => {})}
+                  style={{ color: C.blueDeep, textDecoration: 'underline' }}
+                >
+                  {t.openSettings}
+                </button>
+              </p>
+            ) : (
+              <p className="mt-2" style={{ color: C.sub, fontSize: '11.5px', lineHeight: 1.7 }}>
+                {t.thumbHint(MAX_PHOTOS)}
+              </p>
             )}
+
+            <div className="mt-3" style={{ backgroundColor: C.soft, padding: '14px' }}>
+              <p style={{ color: C.sub, fontSize: '11.5px', lineHeight: 1.8 }}>
+                {t.photoStorageNote}
+              </p>
+            </div>
+
+            <input
+              ref={cap.fileRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={cap.onPick}
+              className="hidden"
+            />
           </div>
         )}
       </div>
     </FullScreenSheet>
+
+    <PhotoCaptureSheets t={t} cap={cap} />
+
+    {lightboxIndex !== null && (
+      <PhotoLightbox
+        t={t}
+        shop={item.shop}
+        date={item.date}
+        photos={photos}
+        index={lightboxIndex}
+        onIndexChange={setLightboxIndex}
+        onClose={() => setLightboxIndex(null)}
+        onDeletePhoto={(i) => {
+          const willBeEmpty = photos.length <= 1;
+          cap.removeImg(i);
+          if (willBeEmpty) setLightboxIndex(null);
+          else setLightboxIndex((idx) => Math.min(idx, photos.length - 2));
+        }}
+        onRotatePhoto={async (i) => {
+          try {
+            const rotated = await rotateImageSrc(photos[i], 90);
+            onPhotosChange(photos.map((p, pi) => (pi === i ? rotated : p)));
+          } catch (e) {}
+        }}
+      />
+    )}
+    </>
+  );
+}
+
+// 畫面34：照片放大檢視。深色全螢幕，跟相機掃描是同一組深色語彙。
+// 手勢：雙指縮放（追蹤兩個 pointer 的距離）、單指左右滑動換照片、
+// 單指下滑關閉；縮放中不吃滑動手勢，兩者用「目前幾指按著」分流。
+function PhotoLightbox({
+  t,
+  shop,
+  date,
+  photos,
+  index,
+  onIndexChange,
+  onClose,
+  onDeletePhoto,
+  onRotatePhoto,
+}) {
+  const [scale, setScale] = useState(1);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [rotating, setRotating] = useState(false);
+  const pointers = useRef(new Map());
+  const pinchStart = useRef(null);
+  const dragStart = useRef(null);
+
+  useEffect(() => {
+    setScale(1);
+    setDragOffset({ x: 0, y: 0 });
+  }, [index]);
+
+  function fmtShort(iso) {
+    const dt = new Date(iso + 'T00:00:00');
+    return `${dt.getMonth() + 1}/${dt.getDate()}`;
+  }
+
+  function onPointerDownImg(e) {
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size === 2) {
+      const pts = Array.from(pointers.current.values());
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      pinchStart.current = { dist, scale };
+      dragStart.current = null;
+    } else if (pointers.current.size === 1) {
+      dragStart.current = { x: e.clientX, y: e.clientY };
+    }
+  }
+
+  function onPointerMoveImg(e) {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size === 2 && pinchStart.current) {
+      const pts = Array.from(pointers.current.values());
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      setScale(
+        Math.max(1, Math.min(4, pinchStart.current.scale * (dist / pinchStart.current.dist))),
+      );
+    } else if (pointers.current.size === 1 && dragStart.current && scale <= 1.05) {
+      setDragOffset({
+        x: e.clientX - dragStart.current.x,
+        y: e.clientY - dragStart.current.y,
+      });
+    }
+  }
+
+  function onPointerUpImg(e) {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinchStart.current = null;
+    if (pointers.current.size === 0) {
+      if (dragStart.current && scale <= 1.05) {
+        const { x: dx, y: dy } = dragOffset;
+        if (Math.abs(dy) > Math.abs(dx) && dy > 90) {
+          onClose();
+        } else if (dx > 60 && index > 0) {
+          onIndexChange(index - 1);
+        } else if (dx < -60 && index < photos.length - 1) {
+          onIndexChange(index + 1);
+        }
+      }
+      setDragOffset({ x: 0, y: 0 });
+      dragStart.current = null;
+      if (scale <= 1.05) setScale(1);
+    }
+  }
+
+  async function share() {
+    try {
+      const res = await fetch(photos[index]);
+      const blob = await res.blob();
+      const file = new File([blob], `receipt-${index + 1}.jpg`, { type: blob.type });
+      if (navigator.share) await navigator.share({ files: [file] });
+    } catch (e) {
+      // 使用者取消分享，或裝置不支援 navigator.share，都直接忽略
+    }
+  }
+
+  async function rotate() {
+    setRotating(true);
+    try {
+      await onRotatePhoto(index);
+    } finally {
+      setRotating(false);
+    }
+  }
+
+  const deleteBody =
+    photos.length > 1 ? t.deletePhotoBodyMulti(photos.length - 1) : t.deletePhotoBodyLast;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col"
+      style={{ backgroundColor: C.ink, fontFamily: FONT }}
+    >
+      <div
+        className="flex items-center justify-between kaeru-pad py-3"
+        style={{
+          paddingTop: 'max(12px, env(safe-area-inset-top))',
+          opacity: confirmDelete ? 0.4 : 1,
+        }}
+      >
+        <button onClick={onClose} style={{ color: '#FFFFFF' }}>
+          <X size={22} />
+        </button>
+        <div className="text-center">
+          <p className="font-semibold" style={{ color: '#FFFFFF', fontSize: '13px' }}>
+            {shop}
+          </p>
+          <p
+            className="mt-0.5 tabular-nums"
+            style={{ color: 'rgba(255,255,255,0.65)', fontSize: '11px' }}
+          >
+            {date} · {index + 1} ／ {photos.length}
+          </p>
+        </div>
+        <button onClick={share} style={{ color: '#FFFFFF', fontSize: '13px' }}>
+          {t.share}
+        </button>
+      </div>
+
+      <div
+        className="relative flex flex-1 items-center justify-center overflow-hidden"
+        style={{ opacity: confirmDelete ? 0.4 : 1 }}
+      >
+        <button
+          onClick={() => index > 0 && onIndexChange(index - 1)}
+          disabled={index === 0}
+          className="absolute left-3 top-1/2 z-10"
+          style={{ color: '#FFFFFF', opacity: index === 0 ? 0.55 : 1, transform: 'translateY(-50%)' }}
+        >
+          <ChevronLeft size={26} />
+        </button>
+        <button
+          onClick={() => index < photos.length - 1 && onIndexChange(index + 1)}
+          disabled={index === photos.length - 1}
+          className="absolute right-3 top-1/2 z-10"
+          style={{
+            color: '#FFFFFF',
+            opacity: index === photos.length - 1 ? 0.55 : 1,
+            transform: 'translateY(-50%)',
+          }}
+        >
+          <ChevronRight size={26} />
+        </button>
+
+        <img
+          src={photos[index]}
+          alt=""
+          onPointerDown={onPointerDownImg}
+          onPointerMove={onPointerMoveImg}
+          onPointerUp={onPointerUpImg}
+          onPointerCancel={onPointerUpImg}
+          className="max-h-full max-w-full object-contain"
+          style={{
+            touchAction: 'none',
+            opacity: rotating ? 0.5 : 1,
+            transform: `translate(${dragOffset.x}px, ${dragOffset.y}px) scale(${scale})`,
+            transition: scale === 1 && dragOffset.x === 0 && dragOffset.y === 0 ? 'transform 150ms' : 'none',
+          }}
+        />
+      </div>
+
+      <div style={{ opacity: confirmDelete ? 0.4 : 1 }}>
+        {photos.length > 1 && (
+          <div className="flex justify-center gap-1.5 pb-3">
+            {photos.map((src, i) => (
+              <button
+                key={i}
+                onClick={() => onIndexChange(i)}
+                style={{
+                  width: '26px',
+                  height: '34px',
+                  backgroundColor: i === index ? C.soft : '#5C5A54',
+                  border: i === index ? '2px solid #FFFFFF' : 'none',
+                }}
+              />
+            ))}
+          </div>
+        )}
+        <div
+          className="kaeru-pad flex items-start justify-between py-3"
+          style={{
+            borderTop: '1px solid rgba(255,255,255,0.25)',
+            paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
+          }}
+        >
+          <div>
+            <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '11.5px' }}>{t.zoomHint}</p>
+            <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '11.5px' }}>{t.swipeHint}</p>
+          </div>
+          <div className="flex shrink-0 gap-4">
+            <button onClick={rotate} className="font-semibold" style={{ color: '#FFFFFF', fontSize: '12.5px' }}>
+              {t.toolRotate}
+            </button>
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="font-bold"
+              style={{ color: '#DCC0A8', fontSize: '12.5px' }}
+            >
+              {t.delete}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {confirmDelete && (
+        <div className="absolute inset-0 z-20" style={{ backgroundColor: 'rgba(73,70,64,0.55)' }}>
+          <div
+            className="absolute inset-x-0 bottom-0 kaeru-pad"
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderTop: '1px solid #494640',
+              paddingTop: '22px',
+              paddingBottom: 'max(22px, env(safe-area-inset-bottom))',
+            }}
+          >
+            <h2 className="font-bold" style={{ fontSize: '18px', color: C.ink }}>
+              {t.deletePhotoTitle}
+            </h2>
+            <p className="mt-2" style={{ color: C.sub, fontSize: '12.5px', lineHeight: 1.9 }}>
+              {deleteBody}
+            </p>
+            <div
+              className="mt-4 flex gap-2"
+              style={{ borderTop: '1px solid #494640', paddingTop: '14px' }}
+            >
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="flex-1 py-3 text-sm"
+                style={{ border: `1px solid ${C.line}`, color: C.sub }}
+              >
+                {t.cancel}
+              </button>
+              <button
+                onClick={() => {
+                  setConfirmDelete(false);
+                  onDeletePhoto(index);
+                }}
+                className="flex-1 py-3 text-sm font-bold"
+                style={{ backgroundColor: C.clay, color: '#FFFFFF' }}
+              >
+                {t.delete}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
