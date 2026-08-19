@@ -4908,21 +4908,20 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
         )}
 
         {!mixed ? (
-          <div style={{ backgroundColor: C.soft, padding: '16px' }}>
-            <div className="flex items-center justify-between gap-3">
+          <div style={{ backgroundColor: C.soft, padding: '13px 14px' }}>
+            <div className="flex items-baseline justify-between gap-3">
               <div className="min-w-0">
-                <p style={{ fontSize: '13px', color: C.ink }}>
+                <p style={{ fontSize: '11px', color: C.sub }}>
                   {t.taxAmount}（{t.taxAuto}）
                 </p>
                 <p
                   className="mt-1 tabular-nums"
-                  style={{ fontSize: '12px', color: C.sub }}
+                  style={{ fontSize: '10.5px', color: C.sub, whiteSpace: 'nowrap' }}
                 >
                   {t.netTotal} ¥{yen(net)}
                   <span
                     style={{
                       marginLeft: '7px',
-                      fontSize: '10.5px',
                       fontWeight: 600,
                       color: thresholdColor,
                     }}
@@ -5006,20 +5005,19 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
                   paddingTop: '10px',
                 }}
               >
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-baseline justify-between gap-3">
                   <div className="min-w-0">
-                    <p style={{ fontSize: '13px', color: C.ink }}>
+                    <p style={{ fontSize: '11px', color: C.sub }}>
                       {t.taxTotalAuto}
                     </p>
                     <p
                       className="mt-1 tabular-nums"
-                      style={{ fontSize: '12px', color: C.sub }}
+                      style={{ fontSize: '10.5px', color: C.sub, whiteSpace: 'nowrap' }}
                     >
                       {t.netTotal} ¥{yen(net)}
                       <span
                         style={{
                           marginLeft: '7px',
-                          fontSize: '10.5px',
                           fontWeight: 600,
                           color: thresholdColor,
                         }}
