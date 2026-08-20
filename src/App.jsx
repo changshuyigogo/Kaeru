@@ -172,7 +172,7 @@ const T = {
     appSub: '日本退稅　先付後退',
     nav: { home: '總覽', list: '收據', check: '查驗', faq: 'FQA', set: '設定' },
     loading: '讀取中',
-    departIn: '回程班機起飛前',
+    departIn: '回程班機起飛前　出発便まで',
     departHint: '設定裡的起飛時間',
     days: '天',
     hours: '小時',
@@ -2623,106 +2623,37 @@ function HomeView({
     return unnamed ? (
       <EmptyUnnamedTrip t={t} onEditTrip={onEditTrip} onAdd={onAdd} />
     ) : (
-      <EmptyNamedTrip t={t} trip={trip} onAdd={onAdd} onGoFaq={onGoFaq} />
+      <EmptyNamedTrip
+        t={t}
+        trip={trip}
+        onAdd={onAdd}
+        onGoFaq={onGoFaq}
+        onGoSettings={onGoSettings}
+      />
     );
   }
 
   return (
     <div className="space-y-10 pb-6">
       <section className="pt-2">
-        {departed ? (
-          <>
-            <p
-              style={{
-                color: C.sub,
-                fontSize: '10.5px',
-                letterSpacing: '0.24em',
-              }}
-            >
-              {t.departedTopLabel}
-            </p>
-            <p className="mt-2" style={{ lineHeight: 1 }}>
-              <span
-                className="kaeru-bignum font-semibold"
-                style={{ color: C.ink }}
-              >
-                {t.departedValue}
-              </span>
-            </p>
-          </>
-        ) : dep && diffMs > 0 ? (
-          <>
-            <p
-              style={{
-                color: C.sub,
-                fontSize: '10.5px',
-                letterSpacing: '0.24em',
-              }}
-            >
-              {t.departIn}
-            </p>
-            <p
-              className="mt-2 flex items-baseline tabular-nums"
-              style={{ letterSpacing: '-0.01em' }}
-            >
-              <span
-                className="kaeru-bignum font-semibold"
-                style={{ color: C.ink, lineHeight: 1 }}
-              >
-                {dDays}
-              </span>
-              <span
-                style={{
-                  color: C.ink,
-                  fontSize: '16px',
-                  fontWeight: 500,
-                  marginLeft: '4px',
-                  marginRight: '12px',
-                }}
-              >
-                {t.days}
-              </span>
-              <span
-                className="kaeru-bignum font-semibold"
-                style={{ color: C.ink, lineHeight: 1 }}
-              >
-                {dHours}
-              </span>
-              <span
-                style={{
-                  color: C.ink,
-                  fontSize: '16px',
-                  fontWeight: 500,
-                  marginLeft: '4px',
-                }}
-              >
-                {t.hours}
-              </span>
-            </p>
-            <div className="mt-4 flex flex-wrap gap-1.5">
-              <Badge tone="blue">
-                {t.arriveTagPre}
-                {fmt(arriveBy)}
-                {t.arriveTagSuf}
-              </Badge>
-              <Badge tone="clay">{t.checkinBadge}</Badge>
-            </div>
-          </>
-        ) : (
-          <button
-            onClick={onGoSettings}
-            className="flex w-full items-center justify-between text-left"
-          >
-            <span>
-              <span className="block text-base font-semibold">
-                {t.setDeparture}
-              </span>
-              <span className="mt-1 block text-xs" style={{ color: C.sub }}>
-                {t.beforeCheckin}
-              </span>
-            </span>
-            <ChevronRight size={18} style={{ color: C.sub }} />
-          </button>
+        <CountdownDisplay
+          t={t}
+          dep={dep}
+          diffMs={diffMs}
+          dDays={dDays}
+          dHours={dHours}
+          departed={departed}
+          onGoSettings={onGoSettings}
+        />
+        {dep && diffMs > 0 && (
+          <div className="mt-4 flex flex-wrap gap-1.5">
+            <Badge tone="blue">
+              {t.arriveTagPre}
+              {fmt(arriveBy)}
+              {t.arriveTagSuf}
+            </Badge>
+            <Badge tone="clay">{t.checkinBadge}</Badge>
+          </div>
         )}
       </section>
 
@@ -2826,6 +2757,77 @@ function HomeView({
         </section>
       )}
     </div>
+  );
+}
+
+// 倒數區的標籤／數字三態（倒數中／已出境／沒設回程時間），總覽正常
+// 畫面跟畫面 39（已命名但沒收據）共用同一份——沒收據不代表倒數跟
+// 查驗進度的邏輯不算，畫面 39 的截圖本來就有倒數，只是下面接的內容
+// 不一樣。
+function CountdownDisplay({ t, dep, diffMs, dDays, dHours, departed, onGoSettings }) {
+  if (departed) {
+    return (
+      <>
+        <p style={{ color: C.sub, fontSize: '10.5px', letterSpacing: '0.24em' }}>
+          {t.departedTopLabel}
+        </p>
+        <p className="mt-2" style={{ lineHeight: 1 }}>
+          <span className="kaeru-bignum font-semibold" style={{ color: C.ink }}>
+            {t.departedValue}
+          </span>
+        </p>
+      </>
+    );
+  }
+  if (dep && diffMs > 0) {
+    return (
+      <>
+        <p style={{ color: C.sub, fontSize: '10.5px', letterSpacing: '0.24em' }}>
+          {t.departIn}
+        </p>
+        <p
+          className="mt-2 flex items-baseline tabular-nums"
+          style={{ letterSpacing: '-0.01em' }}
+        >
+          <span className="kaeru-bignum font-semibold" style={{ color: C.ink, lineHeight: 1 }}>
+            {dDays}
+          </span>
+          <span
+            style={{
+              color: C.ink,
+              fontSize: '16px',
+              fontWeight: 500,
+              marginLeft: '4px',
+              marginRight: '12px',
+            }}
+          >
+            {t.days}
+          </span>
+          <span className="kaeru-bignum font-semibold" style={{ color: C.ink, lineHeight: 1 }}>
+            {dHours}
+          </span>
+          <span
+            style={{ color: C.ink, fontSize: '16px', fontWeight: 500, marginLeft: '4px' }}
+          >
+            {t.hours}
+          </span>
+        </p>
+      </>
+    );
+  }
+  return (
+    <button
+      onClick={onGoSettings}
+      className="flex w-full items-center justify-between text-left"
+    >
+      <span>
+        <span className="block text-base font-semibold">{t.setDeparture}</span>
+        <span className="mt-1 block text-xs" style={{ color: C.sub }}>
+          {t.beforeCheckin}
+        </span>
+      </span>
+      <ChevronRight size={18} style={{ color: C.sub }} />
+    </button>
   );
 }
 
@@ -2940,12 +2942,30 @@ function EmptyUnnamedTrip({ t, onEditTrip, onAdd }) {
 // 空狀態．畫面 39：行程已經有名字、有回程時間，但還沒有任何一張
 // 收據。金額用 sub 色顯示（¥0 只是佔位，不是真的有消費），收據區塊
 // 改成填色 CTA，底下留一個「先看一遍規則」去 FAQ 的連結。
-function EmptyNamedTrip({ t, trip, onAdd, onGoFaq }) {
+function EmptyNamedTrip({ t, trip, onAdd, onGoFaq, onGoSettings }) {
   const airport = trip && trip.airport ? AIRPORTS.find((a) => a.code === trip.airport) : null;
+  // 已經有名字、有回程時間，只是還沒收據——倒數不會因為沒收據就算不
+  // 出來，畫面 39 的截圖本來就顯示倒數，只是下面接的內容換成「行程
+  // 已建立」徽章跟填色 CTA，不是查驗進度。
+  const dep = trip && trip.departure ? new Date(trip.departure) : null;
+  const diffMs = dep ? dep - new Date() : null;
+  const dDays = diffMs !== null ? Math.floor(diffMs / 86400000) : null;
+  const dHours =
+    diffMs !== null ? Math.floor((diffMs % 86400000) / 3600000) : null;
+  const departed = !!dep && diffMs <= 0;
   return (
     <div className="pb-6">
       <section className="pt-2">
-        <div className="flex flex-wrap gap-1.5">
+        <CountdownDisplay
+          t={t}
+          dep={dep}
+          diffMs={diffMs}
+          dDays={dDays}
+          dHours={dHours}
+          departed={departed}
+          onGoSettings={onGoSettings}
+        />
+        <div className="mt-4 flex flex-wrap gap-1.5">
           <Badge tone="sage" size="lg">
             {t.tripCreatedBadge}
           </Badge>
