@@ -1,10 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  Home,
   Rows3,
-  ScanLine,
-  HelpCircle,
-  Settings as Cog,
   Plus,
   X,
   Trash2,
@@ -13,16 +9,169 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
-  Globe,
   RefreshCw,
   ArrowLeft,
   Menu,
   Calendar as CalIcon,
-  MapPin,
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import ReceiptScanner from './receiptScanner.js';
+
+/* ------------------------------------------------------------------
+   返回鍵／左緣滑動／畫面上「‹」統一處理。
+
+   用 history.pushState 當「還疊著幾層 sheet/面板」的唯一真相：每打開
+   一層（sheet、面板、非總覽的分頁）就 push 一筆，帶一個獨一無二的
+   token；popstate 一律只關「目前 token 等於全域深度」那一層，一次
+   只退一層。手機硬體返回鍵（Android，透過 @capacitor/app 轉成
+   history.back()）跟左緣滑動（iOS，WKWebView 手勢本來就是操作同一份
+   history）都會變成 popstate，跟畫面上按鈕點的「返回/‹/✕」走同一條
+   路——按鈕關閉時該層會主動呼叫 history.back() 把自己那筆吃掉，
+   避免堆疊跟瀏覽器 history 長度兜不起來。
+------------------------------------------------------------------ */
+let kaeruBackDepth = 0;
+const kaeruBackHandlers = new Set();
+
+function useBackClose(isOpen, onClose) {
+  const depthRef = useRef(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
+  // 這一層在畫面上的存在方式有兩種：整個元件只在開著時才掛載（掛上=
+  // 開、拿掉=關，這個 app 大部分 sheet 都是這樣），或是元件本身一直
+  // 掛著、isOpen 這個 prop 自己在 true/false 之間切換（例如總覽以外
+  // 的分頁）。兩種都靠同一個 effect 處理：開的時候 push 一筆，「關」
+  // 不管是因為 isOpen 變 false 還是元件被整個拿掉，都會讓這個 effect
+  // 的 cleanup 跑一次，在 cleanup 裡把那筆 history entry 吃掉——不用
+  // 另外去偵測「isOpen 從 true 變 false」，unmount 本來就會觸發 cleanup。
+  useEffect(() => {
+    if (!isOpen) return;
+    kaeruBackDepth += 1;
+    const myDepth = kaeruBackDepth;
+    depthRef.current = myDepth;
+    window.history.pushState({ kaeruDepth: myDepth }, '');
+
+    function handlePop() {
+      // 一定要連 kaeruBackDepth（全域「目前最上層是誰」）一起比對，
+      // 只比 depthRef.current === myDepth 是不夠的——那個條件只代表
+      // 「這一層還沒被關過」，任何還開著的層都會通過，一次 popstate
+      // 會把所有還開著的層通通關掉，不是只關最上面那一層。
+      if (depthRef.current === myDepth && kaeruBackDepth === myDepth) {
+        depthRef.current = null;
+        kaeruBackDepth -= 1;
+        closeRef.current();
+      }
+    }
+    kaeruBackHandlers.add(handlePop);
+
+    return () => {
+      kaeruBackHandlers.delete(handlePop);
+      // depthRef.current 還是 myDepth，代表這層不是被 popstate 關掉
+      // 的（是按了畫面上的按鈕，或元件被拿掉）——把剛剛推的那筆吃掉，
+      // 讓堆疊深度跟畫面對齊。
+      if (depthRef.current === myDepth) {
+        depthRef.current = null;
+        if (kaeruBackDepth === myDepth) kaeruBackDepth -= 1;
+        if (window.history.state && window.history.state.kaeruDepth === myDepth) {
+          window.history.back();
+        }
+      }
+    };
+  }, [isOpen]);
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('popstate', () => {
+    for (const fn of kaeruBackHandlers) fn();
+  });
+}
+
+// 新增收據／編輯行程／裁切照片這三個表單共用：返回（不管是按鈕、
+// 硬體返回鍵還是滑動）時如果有還沒存的變動，先問要不要放棄，不要
+// 直接丟掉。選「繼續編輯」要讓這一層重新排回 history 堆疊最上面，
+// 不然下一次返回會找不到人接——靠 gen 這個世代計數器強迫
+// useBackClose 的 effect 重新跑一次（同一層再 push 一筆新的）。
+function useDirtyBackGuard(isDirty, onClose) {
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [gen, setGen] = useState(0);
+  const isDirtyRef = useRef(isDirty);
+  isDirtyRef.current = isDirty;
+
+  function requestClose() {
+    if (isDirtyRef.current) {
+      setDiscardOpen(true);
+      setGen((g) => g + 1);
+    } else {
+      onClose();
+    }
+  }
+
+  useBackClose(`kaeruLayer:${gen}`, requestClose);
+
+  return {
+    discardOpen,
+    requestClose,
+    keepEditing: () => setDiscardOpen(false),
+    discard: () => {
+      setDiscardOpen(false);
+      onClose();
+    },
+  };
+}
+
+// 「這筆還沒存，要放棄嗎？」的確認面板，三個表單共用一份文字跟樣式。
+function DiscardConfirmSheet({ t, onKeepEditing, onDiscard }) {
+  return (
+    <BottomSheet onClose={onKeepEditing}>
+      <p className="font-bold" style={{ fontSize: '15px', color: C.ink }}>
+        {t.discardTitle}
+      </p>
+      <div className="mt-4 flex gap-2">
+        <button
+          onClick={onKeepEditing}
+          className="flex-1 py-3 text-sm font-semibold"
+          style={{ border: `1px solid ${C.line}`, color: C.ink }}
+        >
+          {t.keepEditing}
+        </button>
+        <button
+          onClick={onDiscard}
+          className="flex-1 py-3 text-sm font-bold"
+          style={{ backgroundColor: C.clay, color: '#FFFFFF' }}
+        >
+          {t.discard}
+        </button>
+      </div>
+    </BottomSheet>
+  );
+}
+
+// 「關掉這一層、換開另一層」（例如選單→行程切換面板）如果兩個
+// setState 落在同一次 React commit，關閉那層的 history.back() 跟開啟
+// 那層的 history.pushState 會搶在同一個 tick 裡執行——history.back()
+// 的實際 popstate 是排到之後才觸發的，如果 pushState 在它完成之前就
+// 搶先執行，History API 沒有保證這種混用的順序（實測過：用固定的
+// setTimeout(0) 延遲不夠保險，pushState 有時還是搶在 popstate 前面
+// 執行，導致堆疊深度跟畫面兜不起來）。改成真的等那個 popstate 先
+// 觸發完，才執行「開新的那一半」；如果這次關閉根本沒有觸發
+// history.back()（沒有東西可吃），用一個短逾時保底，不要卡死。
+function deferOpen(fn) {
+  let done = false;
+  function run() {
+    if (done) return;
+    done = true;
+    window.removeEventListener('popstate', onPop);
+    clearTimeout(timer);
+    fn();
+  }
+  function onPop() {
+    run();
+  }
+  window.addEventListener('popstate', onPop);
+  const timer = setTimeout(run, 60);
+}
 
 /* ------------------------------------------------------------------
    Kaeru　日本退稅小幫手 / 免税リファンドヘルパー
@@ -261,6 +410,12 @@ const T = {
     save: '儲存',
     edit: '編輯',
     cancel: '取消',
+    discardTitle: '這筆還沒存，要放棄嗎？',
+    keepEditing: '繼續編輯',
+    discard: '放棄',
+    exitPressAgain: '再按一次返回鍵就離開',
+    exitDataSafe: '收據都存好了，資料不會不見',
+    exitStay: '留下',
     status: '目前狀態',
     stage: {
       purchased: '已購買',
@@ -381,15 +536,17 @@ const T = {
     time: '時間',
     weekdays: ['日', '一', '二', '三', '四', '五', '六'],
     navDesc: {
-      home: '出發倒數和金額統計',
-      list: '新增和管理每一張收據',
-      check: '出示給海關的清單',
+      home: '倒數、金額、回程當天流程',
+      list: '新增與管理每一張收據',
+      check: '機場現場核對還剩幾張',
       faq: '規則、小撇步、情境模擬',
-      set: '行程、匯率、語言',
+      set: '匯率、語言、資料',
     },
     menuTrip: '切換行程',
     menuLang: '語言',
     menuAdd: '新增收據',
+    menuCurrent: '目前',
+    tripCountUnit: '趟行程',
     sim: '情境模擬：一趟大阪之旅',
     simSub: '六個決定，看你最後能退多少',
     startSim: '開始這趟旅程',
@@ -564,6 +721,12 @@ const T = {
     save: '保存',
     edit: '編集',
     cancel: 'キャンセル',
+    discardTitle: 'まだ保存されていません。破棄しますか？',
+    keepEditing: '編集を続ける',
+    discard: '破棄',
+    exitPressAgain: 'もう一度戻るボタンを押すと終了します',
+    exitDataSafe: 'レシートは保存済みです。データは消えません',
+    exitStay: '留まる',
     status: 'ステータス',
     stage: {
       purchased: '購入済み',
@@ -687,15 +850,17 @@ const T = {
     time: '時刻',
     weekdays: ['日', '月', '火', '水', '木', '金', '土'],
     navDesc: {
-      home: '出発までの残り時間と金額',
+      home: 'カウントダウン、金額、帰国当日の流れ',
       list: 'レシートの追加と管理',
-      check: '税関へ提示する一覧',
+      check: '空港で残り件数を確認',
       faq: 'ルール・コツ・シミュレーション',
-      set: '旅程・レート・言語',
+      set: 'レート、言語、データ',
     },
     menuTrip: '旅程を切り替え',
     menuLang: '言語',
     menuAdd: 'レシートを追加',
+    menuCurrent: '現在',
+    tripCountUnit: '件の旅程',
     sim: 'シミュレーション：大阪 4 日間',
     simSub: '6 つの判断で返金額が変わります',
     startSim: '旅を始める',
@@ -1994,9 +2159,64 @@ export default function App() {
   const [quizOn, setQuizOn] = useState(false);
   const [rateBusy, setRateBusy] = useState(false);
   const [rateErr, setRateErr] = useState(false);
+  const [exitArmed, setExitArmed] = useState(false); // Android 離開提示條：按第一次返回鍵才會顯示
+  const exitArmedRef = useRef(false);
+  const exitTimerRef = useRef(null);
 
   const lang = settings.lang;
   const t = T[lang];
+
+  // 五個主畫面同一層：不管在收據／查驗／FQA／設定互相怎麼切，返回鍵
+  // 一次就回總覽，不會一層一層退之前切過的分頁。
+  useBackClose(tab !== 'home', () => setTab('home'));
+  useBackClose(tripSheet, () => setTripSheet(false));
+  useBackClose(endedSheetOpen, () => setEndedSheetOpen(false));
+  useBackClose(menuOpen, () => setMenuOpen(false));
+  useBackClose(!!openId, () => setOpenId(null));
+  useBackClose(quizOn, () => setQuizOn(false));
+  // editing（新增/編輯收據）跟 editingTripId（編輯行程）都不在這裡
+  // 註冊：EditSheet／TripEditSheet 自己用 useDirtyBackGuard 接返回，
+  // 有未存的變動要先問，不能直接關掉。這裡如果重複註冊一次，等於
+  // 同一層在堆疊裡算了兩次，返回一次會多退一層。
+
+  function armExitHint() {
+    exitArmedRef.current = true;
+    setExitArmed(true);
+    clearTimeout(exitTimerRef.current);
+    exitTimerRef.current = setTimeout(() => {
+      exitArmedRef.current = false;
+      setExitArmed(false);
+    }, 2000);
+  }
+
+  // Android 實體返回鍵：全部自己接管，不用系統預設行為（預設是
+  // webView.goBack() 或直接關 App，兩個都不是我們要的）。有任何一層
+  // sheet/面板開著（kaeruBackDepth > 0）就照 history 退一層；已經在
+  // 最底層（總覽、沒有任何 sheet）才走雙擊退出流程。iOS 沒有這顆鍵，
+  // 這個 listener 在 iOS 上不會被呼叫。用 ref 讀 exitArmed 是為了只
+  // 訂閱一次，不用每次提示條開關都重新 addListener。
+  useEffect(() => {
+    let handle;
+    CapacitorApp.addListener('backButton', () => {
+      if (kaeruBackDepth > 0) {
+        window.history.back();
+        return;
+      }
+      if (exitArmedRef.current) {
+        clearTimeout(exitTimerRef.current);
+        exitArmedRef.current = false;
+        setExitArmed(false);
+        CapacitorApp.exitApp();
+      } else {
+        armExitHint();
+      }
+    }).then((h) => {
+      handle = h;
+    });
+    return () => {
+      handle && handle.remove();
+    };
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -2274,7 +2494,7 @@ export default function App() {
         className="kaeru-app"
         style={{
           backgroundColor: C.page,
-          opacity: tripSheet || endedSheetOpen ? 0.35 : 1,
+          opacity: tripSheet || endedSheetOpen || menuOpen ? 0.35 : 1,
           transition: 'opacity 200ms',
         }}
       >
@@ -2366,34 +2586,6 @@ export default function App() {
                   {menuOpen ? <X size={20} /> : <Menu size={20} />}
                 </button>
 
-                {menuOpen && (
-                  <MenuDropdown
-                    t={t}
-                    lang={lang}
-                    tab={tab}
-                    trip={activeTrip}
-                    onClose={() => setMenuOpen(false)}
-                    onGo={(k) => {
-                      setTab(k);
-                      setQuizOn(false);
-                      setMenuOpen(false);
-                    }}
-                    onAdd={() => {
-                      setMenuOpen(false);
-                      setEditing('new');
-                    }}
-                    onTrips={() => {
-                      setMenuOpen(false);
-                      setTripSheet(true);
-                    }}
-                    onLang={() =>
-                      setSettings((s) => ({
-                        ...s,
-                        lang: s.lang === 'zh' ? 'ja' : 'zh',
-                      }))
-                    }
-                  />
-                )}
               </div>
             </div>
           </header>
@@ -2485,6 +2677,75 @@ export default function App() {
         </main>
       </div>
 
+      {exitArmed && Capacitor.getPlatform() === 'android' && (
+        <div
+          className="fixed inset-0 z-50"
+          style={{ pointerEvents: 'none' }}
+        >
+          <div className="relative kaeru-app" style={{ minHeight: 0, height: '100%' }}>
+            <div
+              className="absolute"
+              style={{
+                left: '26px',
+                right: '26px',
+                bottom: 'max(34px, calc(env(safe-area-inset-bottom) + 14px))',
+                backgroundColor: C.ink,
+                padding: '14px 16px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '14px',
+                pointerEvents: 'auto',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: '#FFFFFF' }}>
+                  {t.exitPressAgain}
+                </div>
+                <div
+                  className="mt-0.5"
+                  style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)' }}
+                >
+                  {t.exitDataSafe}
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  clearTimeout(exitTimerRef.current);
+                  exitArmedRef.current = false;
+                  setExitArmed(false);
+                }}
+                style={{ fontSize: '11.5px', fontWeight: 700, color: C.sage, flexShrink: 0 }}
+              >
+                {t.exitStay}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {menuOpen && (
+        <MenuSheet
+          t={t}
+          tab={tab}
+          trip={activeTrip}
+          itemCount={tripItems.length}
+          tripCount={trips.length}
+          onClose={() => setMenuOpen(false)}
+          onGo={(k) => {
+            setMenuOpen(false);
+            deferOpen(() => {
+              setTab(k);
+              setQuizOn(false);
+            });
+          }}
+          onTrips={() => {
+            setMenuOpen(false);
+            deferOpen(() => setTripSheet(true));
+          }}
+        />
+      )}
+
       {tripSheet && (
         <TripSheet
           t={t}
@@ -2520,11 +2781,11 @@ export default function App() {
           onClose={() => setEndedSheetOpen(false)}
           onCreateNew={() => {
             setEndedSheetOpen(false);
-            setTripSheet(true);
+            deferOpen(() => setTripSheet(true));
           }}
           onViewRecords={() => {
             setEndedSheetOpen(false);
-            setTab('list');
+            deferOpen(() => setTab('list'));
           }}
         />
       )}
@@ -4472,121 +4733,98 @@ function BottomSheet({ onClose, children }) {
   );
 }
 
-function MenuDropdown({
-  t,
-  lang,
-  tab,
-  trip,
-  onClose,
-  onGo,
-  onAdd,
-  onTrips,
-  onLang,
-}) {
-  const rows = [
-    ['home', Home],
-    ['list', Rows3],
-    ['check', ScanLine],
-    ['faq', HelpCircle],
-    ['set', Cog],
-  ];
-
-  const rowCls = 'flex w-full items-center gap-3 px-4 py-3 text-left';
+// 畫面41：選單改成貼底面板，沿用行程切換那套視覺（底層 opacity:.35、
+// 遮罩、border-top 實色不做圓角）。副標不是裝飾——沒有底部分頁列可以
+// 認圖示，選單是唯一看得到全部功能的地方，所以每個主畫面都帶一行
+// 說明。目前所在的那一頁用填色「目前」標籤取代 ›。
+function MenuSheet({ t, tab, trip, itemCount, tripCount, onClose, onGo, onTrips }) {
+  const rowKeys = ['home', 'list', 'check', 'faq', 'set'];
+  const titleOf = {
+    home: t.nav.home,
+    list: t.receipts,
+    check: t.checkTitle,
+    faq: t.faqTitle,
+    set: t.settings,
+  };
 
   return (
-    <>
-      <style>{`@keyframes jpMenuIn{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}`}</style>
-
-      <div className="fixed inset-0 z-30" onClick={onClose} />
-
-      <div
-        className="absolute right-0 z-40 overflow-hidden rounded-2xl"
-        style={{
-          top: 'calc(100% + 8px)',
-          width: '17.5rem',
-          maxWidth: 'calc(100vw - 2rem)',
-          backgroundColor: C.card,
-          border: `1px solid ${C.line}`,
-          boxShadow: '0 12px 32px rgba(73,70,64,0.14)',
-          transformOrigin: 'top right',
-          animation: 'jpMenuIn 140ms ease-out',
-        }}
-      >
-        <div className="p-3">
-          <button
-            onClick={onAdd}
-            className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold"
-            style={{ backgroundColor: C.blue, color: '#FFFFFF' }}
-          >
-            <Plus size={16} /> {t.menuAdd}
-          </button>
+    <BottomSheet onClose={onClose}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <FrogMark size={26} />
+          <div>
+            <div
+              className="font-semibold"
+              style={{
+                fontSize: '12.5px',
+                letterSpacing: '0.28em',
+                color: C.blueDeep,
+                textTransform: 'uppercase',
+              }}
+            >
+              {t.appName}
+            </div>
+            <div className="mt-0.5" style={{ fontSize: '11px', color: C.sub }}>
+              {trip && trip.name ? trip.name : t.tripUnnamed} · {itemCount} {t.tripReceipts}
+            </div>
+          </div>
         </div>
-
-        <div style={{ borderTop: `1px solid ${C.line}` }}>
-          {rows.map(([k, Icon], i) => {
-            const on = tab === k;
-            return (
-              <button
-                key={k}
-                onClick={() => onGo(k)}
-                className={rowCls}
-                style={{
-                  borderTop: i === 0 ? 'none' : `1px solid ${C.line}`,
-                  backgroundColor: on ? C.blueSoft : 'transparent',
-                }}
-              >
-                <Icon
-                  size={17}
-                  style={{ color: on ? C.blue : C.sub }}
-                  strokeWidth={on ? 2.2 : 1.7}
-                />
-                <span className="flex-1">
-                  <span
-                    className="block text-sm"
-                    style={{ color: on ? C.blueDeep : C.ink }}
-                  >
-                    {t.nav[k]}
-                  </span>
-                  <span
-                    className="mt-0.5 block text-xs leading-5"
-                    style={{ color: C.sub }}
-                  >
-                    {t.navDesc[k]}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        <button
-          onClick={onTrips}
-          className={rowCls}
-          style={{ borderTop: `1px solid ${C.line}` }}
-        >
-          <MapPin size={17} style={{ color: C.sub }} strokeWidth={1.7} />
-          <span className="flex-1">
-            <span className="block text-sm">{t.menuTrip}</span>
-            <span className="mt-0.5 block text-xs" style={{ color: C.sub }}>
-              {trip && trip.name ? trip.name : t.tripNow}
-            </span>
-          </span>
-          <ChevronRight size={14} style={{ color: C.sub }} />
-        </button>
-
-        <button
-          onClick={onLang}
-          className={rowCls}
-          style={{ borderTop: `1px solid ${C.line}` }}
-        >
-          <Globe size={17} style={{ color: C.sub }} strokeWidth={1.7} />
-          <span className="flex-1 text-sm">{t.menuLang}</span>
-          <span className="text-xs font-medium" style={{ color: C.blueDeep }}>
-            {lang === 'zh' ? '日本語' : '中文'}
-          </span>
+        <button onClick={onClose} style={{ color: C.sub }}>
+          <X size={15} />
         </button>
       </div>
-    </>
+
+      <div className="mt-4.5 flex flex-col">
+        {rowKeys.map((k, i) => {
+          const on = tab === k;
+          return (
+            <button
+              key={k}
+              onClick={() => onGo(k)}
+              className="flex items-center justify-between py-3.5 text-left"
+              style={{ borderTop: `1px solid ${i === 0 ? C.ink : C.line}` }}
+            >
+              <span>
+                <span
+                  className="block"
+                  style={{ fontSize: '15px', fontWeight: on ? 700 : 400, color: C.ink }}
+                >
+                  {titleOf[k]}
+                </span>
+                <span className="mt-0.5 block" style={{ fontSize: '11px', color: C.sub }}>
+                  {t.navDesc[k]}
+                </span>
+              </span>
+              {on ? (
+                <Badge tone="blue">{t.menuCurrent}</Badge>
+              ) : (
+                <span style={{ fontSize: '13px', color: C.sub }}>›</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      <button
+        onClick={onTrips}
+        className="flex w-full items-center justify-between text-left"
+        style={{
+          marginTop: '16px',
+          borderTop: `1px solid ${C.ink}`,
+          paddingTop: '14px',
+        }}
+      >
+        <span>
+          <span className="block" style={{ fontSize: '14px', color: C.ink }}>
+            {t.menuTrip}
+          </span>
+          <span className="mt-0.5 block" style={{ fontSize: '11px', color: C.sub }}>
+            {tripCount} {t.tripCountUnit}
+          </span>
+        </span>
+        <span style={{ fontSize: '13px', color: C.sub }}>›</span>
+      </button>
+    </BottomSheet>
   );
 }
 
@@ -4808,8 +5046,22 @@ function TripEditSheet({
   const [setActive, setSetActive] = useState(isActive);
   const [airportOpen, setAirportOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  useBackClose(airportOpen, () => setAirportOpen(false));
 
   const airportInfo = AIRPORTS.find((a) => a.code === airport);
+
+  const initialSnapshotRef = useRef(
+    JSON.stringify({
+      name: trip.name || '',
+      departure: trip.departure || '',
+      airport: trip.airport || '',
+      setActive: isActive,
+    }),
+  );
+  const isDirty =
+    JSON.stringify({ name, departure, airport, setActive }) !==
+    initialSnapshotRef.current;
+  const guard = useDirtyBackGuard(isDirty, onClose);
 
   function save() {
     onSave({ name: name.trim(), departure, airport: airport || null }, setActive);
@@ -4827,7 +5079,7 @@ function TripEditSheet({
             paddingBottom: '16px',
           }}
         >
-          <button onClick={onClose} style={{ fontSize: '15px', color: C.sub }}>
+          <button onClick={guard.requestClose} style={{ fontSize: '15px', color: C.sub }}>
             {t.cancel}
           </button>
           <h2 className="font-bold" style={{ fontSize: '15px' }}>
@@ -5002,6 +5254,14 @@ function TripEditSheet({
           }}
         />
       )}
+
+      {guard.discardOpen && (
+        <DiscardConfirmSheet
+          t={t}
+          onKeepEditing={guard.keepEditing}
+          onDiscard={guard.discard}
+        />
+      )}
     </>
   );
 }
@@ -5088,8 +5348,8 @@ function AirportPickerSheet({ t, selected, onClose, onPick }) {
         >
           <button
             onClick={onClose}
-            className="flex items-center"
-            style={{ width: '52px', fontSize: '13px', color: C.sub }}
+            className="flex items-center font-semibold"
+            style={{ minWidth: '52px', minHeight: '44px', fontSize: '13px', color: C.blueDeep }}
           >
             ‹ {t.back}
           </button>
@@ -5239,6 +5499,10 @@ function usePhotoCapture({ imgs, setImgs, onParsed }) {
   const [confirmPhoto, setConfirmPhoto] = useState(null); // { src, fromScan } | null
   const fileRef = useRef(null);
   const remaining = MAX_PHOTOS - imgs.length;
+  useBackClose(photoPromptOpen, () => setPhotoPromptOpen(false));
+  // confirmPhoto（裁切畫面）的返回要先問「要放棄嗎」，不能直接關，
+  // 交給 PhotoConfirmSheet 自己用 useBackClose 接（見該元件），這裡
+  // 不重複註冊，否則兩邊會搶同一層。
 
   function isPermissionDenied(err) {
     if (!err) return false;
@@ -5405,9 +5669,10 @@ function PhotoCaptureSheets({ t, cap }) {
           fromScan={cap.confirmPhoto.fromScan}
           onRetake={() => {
             cap.finishConfirm(null);
-            cap.pickPhoto();
+            deferOpen(() => cap.pickPhoto());
           }}
           onUse={cap.finishConfirm}
+          onClose={() => cap.finishConfirm(null)}
         />
       )}
     </>
@@ -5433,6 +5698,44 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
   const [consumed, setConsumed] = useState(initial?.consumed || false);
   const [note, setNote] = useState(initial?.note || '');
   const [imgs, setImgs] = useState(photos || []);
+
+  // 返回時判斷「有沒有還沒存的變動」：跟掛載當下那份初始值比對，
+  // 差一個字都算有改。新增收據（initial 沒傳）從全部預設值開始比。
+  const initialSnapshotRef = useRef(
+    JSON.stringify({
+      shop: initial?.shop || '',
+      date: initial?.date || todayStr(),
+      incl: initial?.incl ?? '',
+      incl8: initial?.incl8 ?? '',
+      incl10: initial?.incl10 ?? '',
+      rate: initial?.rate ?? 10,
+      taxOverride:
+        initial?.taxOverride === null || initial?.taxOverride === undefined
+          ? ''
+          : initial.taxOverride,
+      refundReg: initial ? STAGES.indexOf(initial.status) >= 1 : false,
+      unpacked: initial?.unpacked || false,
+      consumed: initial?.consumed || false,
+      note: initial?.note || '',
+      imgs: photos || [],
+    }),
+  );
+  const isDirty =
+    JSON.stringify({
+      shop,
+      date,
+      incl,
+      incl8,
+      incl10,
+      rate,
+      taxOverride,
+      refundReg,
+      unpacked,
+      consumed,
+      note,
+      imgs,
+    }) !== initialSnapshotRef.current;
+  const guard = useDirtyBackGuard(isDirty, onClose);
 
   const mixed = rate === 'mixed';
   const v8 = Number(incl8) || 0;
@@ -5537,7 +5840,7 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
           paddingBottom: '16px',
         }}
       >
-        <button onClick={onClose} style={{ fontSize: '15px', color: C.sub }}>
+        <button onClick={guard.requestClose} style={{ fontSize: '15px', color: C.sub }}>
           {t.cancel}
         </button>
         <h2 className="font-bold" style={{ fontSize: '15px' }}>
@@ -5971,6 +6274,13 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
     </FullScreenSheet>
 
     <PhotoCaptureSheets t={t} cap={cap} />
+    {guard.discardOpen && (
+      <DiscardConfirmSheet
+        t={t}
+        onKeepEditing={guard.keepEditing}
+        onDiscard={guard.discard}
+      />
+    )}
     </>
   );
 }
@@ -5978,13 +6288,14 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
 // 畫面4：確認與裁切。四角把手是相對於「圖片自己實際渲染出來的那個框」
 // 的百分比座標（0~1），拖曳時用 wrapperRef 量測出來的框反推百分比，
 // 這樣不管圖片比例、螢幕大小都對得上，不用管 object-fit 的letterbox。
-function PhotoConfirmSheet({ t, src, fromScan, onRetake, onUse }) {
-  const [corners, setCorners] = useState([
+function PhotoConfirmSheet({ t, src, fromScan, onRetake, onUse, onClose }) {
+  const DEFAULT_CORNERS = [
     { x: 0.04, y: 0.04 },
     { x: 0.96, y: 0.04 },
     { x: 0.96, y: 0.96 },
     { x: 0.04, y: 0.96 },
-  ]);
+  ];
+  const [corners, setCorners] = useState(DEFAULT_CORNERS);
   const [rotation, setRotation] = useState(0);
   const [contrastOn, setContrastOn] = useState(false);
   const [outBytes, setOutBytes] = useState(null);
@@ -5993,6 +6304,14 @@ function PhotoConfirmSheet({ t, src, fromScan, onRetake, onUse }) {
   const imgRef = useRef(null);
   const dragIdx = useRef(null);
   const inBytes = useMemo(() => dataUrlBytes(src), [src]);
+
+  // 返回時的「有沒有改過」：裁切把手、旋轉、對比隨便動一個就算——
+  // 使用者已經花時間調過，返回不能默默丟掉。
+  const isDirty =
+    rotation !== 0 ||
+    contrastOn ||
+    JSON.stringify(corners) !== JSON.stringify(DEFAULT_CORNERS);
+  const guard = useDirtyBackGuard(isDirty, onClose);
 
   useEffect(() => {
     let alive = true;
@@ -6100,6 +6419,7 @@ function PhotoConfirmSheet({ t, src, fromScan, onRetake, onUse }) {
   });
 
   return (
+    <>
     <FullScreenSheet>
       <div
         className="sticky top-0 z-10 flex items-center justify-between kaeru-pad"
@@ -6261,6 +6581,15 @@ function PhotoConfirmSheet({ t, src, fromScan, onRetake, onUse }) {
         </button>
       </div>
     </FullScreenSheet>
+
+    {guard.discardOpen && (
+      <DiscardConfirmSheet
+        t={t}
+        onKeepEditing={guard.keepEditing}
+        onDiscard={guard.discard}
+      />
+    )}
+    </>
   );
 }
 
@@ -6287,6 +6616,7 @@ function DetailSheet({
   const [reorderMode, setReorderMode] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(null);
   const [dragState, setDragState] = useState(null); // { from, dx } | null
+  useBackClose(lightboxIndex !== null, () => setLightboxIndex(null));
   const cap = usePhotoCapture({ imgs: photos, setImgs: (updater) => onPhotosChange(typeof updater === 'function' ? updater(photos) : updater) });
 
   function movePhoto(from, to) {
@@ -6351,7 +6681,11 @@ function DetailSheet({
           paddingBottom: '16px',
         }}
       >
-        <button onClick={onClose} style={{ fontSize: '13px', color: C.sub }}>
+        <button
+          onClick={onClose}
+          className="font-semibold"
+          style={{ fontSize: '13px', color: C.blueDeep, minHeight: '44px' }}
+        >
           ‹ {t.receipts}
         </button>
         <div className="flex items-center gap-4">
