@@ -5587,12 +5587,17 @@ function usePhotoCapture({ imgs, setImgs, onParsed }) {
   async function openCamera() {
     setPhotoPromptOpen(false);
     try {
+      // 用 Uri 不用 DataUrl：DataUrl 要原生端先把整張全解析度照片轉成
+      // base64 字串才會把結果傳回來，拍完之後那段「等」就是卡在這裡。
+      // Uri 原生端只回一個檔案路徑，幾乎是瞬間的，確認/裁切畫面能馬上
+      // 顯示；真的需要 base64（存檔、辨識）的地方再各自轉，且那些都
+      // 可以在背景做，不用擋著使用者看到照片。
       const shot = await Camera.getPhoto({
-        resultType: CameraResultType.DataUrl,
+        resultType: CameraResultType.Uri,
         source: CameraSource.Camera,
         quality: 80,
       });
-      if (shot?.dataUrl) setConfirmPhoto({ src: shot.dataUrl, fromScan: false });
+      if (shot?.webPath) setConfirmPhoto({ src: shot.webPath, fromScan: false });
     } catch (err) {
       if (isPermissionDenied(err)) setPhotoDenied('camera');
     }
@@ -6410,10 +6415,28 @@ function PhotoConfirmSheet({ t, src, fromScan, onRetake, onUse, onClose }) {
   const [contrastOn, setContrastOn] = useState(false);
   const [outBytes, setOutBytes] = useState(null);
   const [ocr, setOcr] = useState({ loading: true, parsed: null });
+  const [inBytes, setInBytes] = useState(0);
   const wrapperRef = useRef(null);
   const imgRef = useRef(null);
   const dragIdx = useRef(null);
-  const inBytes = useMemo(() => dataUrlBytes(src), [src]);
+
+  // src 可能是 data URL（掃描結果，原生端已經是 base64）或是相機給的
+  // webPath（檔案路徑，不是 base64）——「壓縮前」大小要看情況：是
+  // data URL 就直接算，是路徑就實際抓一次檔案大小。
+  useEffect(() => {
+    let alive = true;
+    if (src.startsWith('data:')) {
+      setInBytes(dataUrlBytes(src));
+    } else {
+      fetch(src)
+        .then((r) => r.blob())
+        .then((b) => alive && setInBytes(b.size))
+        .catch(() => alive && setInBytes(0));
+    }
+    return () => {
+      alive = false;
+    };
+  }, [src]);
 
   // 返回時的「有沒有改過」：裁切把手、旋轉、對比隨便動一個就算——
   // 使用者已經花時間調過，返回不能默默丟掉。
@@ -6425,8 +6448,13 @@ function PhotoConfirmSheet({ t, src, fromScan, onRetake, onUse, onClose }) {
 
   useEffect(() => {
     let alive = true;
-    ReceiptScanner.recognizeText({ image: src })
-      .then((res) => {
+    (async () => {
+      try {
+        // recognizeText 原生端只吃 base64；掃描結果本來就是 data URL，
+        // 相機給的 webPath 不是，要先轉一次。這一步跟畫面顯示無關，
+        // 不會擋到裁切畫面出現，使用者已經看得到照片、可以開始調整了。
+        const b64Src = src.startsWith('data:') ? src : await compressImageSrc(src, 1600, 0.85);
+        const res = await ReceiptScanner.recognizeText({ image: b64Src });
         if (!alive) return;
         // 方便真機除錯：辨識出的原始文字跟解析結果都印出來，
         // 「讀不到」跟「辨識本身失敗」在畫面上長一樣，但 console 看得出差別
@@ -6434,11 +6462,11 @@ function PhotoConfirmSheet({ t, src, fromScan, onRetake, onUse, onClose }) {
         const parsed = parseReceiptOCR(res?.text || '');
         console.log('[ReceiptScanner] parsed:', parsed);
         setOcr({ loading: false, parsed });
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error('[ReceiptScanner] recognizeText failed:', err);
         if (alive) setOcr({ loading: false, parsed: null });
-      });
+      }
+    })();
     return () => {
       alive = false;
     };
