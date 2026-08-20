@@ -4352,6 +4352,8 @@ function SettingsView({
               {t.clearConfirm}
             </p>
             <div className="mt-3 flex gap-2">
+              {/* 灰赭實心填色按鈕整個 app 只留給照片刪除那個真正的破壞性
+                  確認畫面用；清除所有資料維持跟上面連結一致的線框樣式 */}
               <button
                 onClick={() => {
                   onClear();
@@ -4359,8 +4361,8 @@ function SettingsView({
                 }}
                 className="px-3 py-1.5 text-sm font-medium"
                 style={{
-                  backgroundColor: C.clay,
-                  color: '#FFFFFF',
+                  border: `1px solid ${C.clay}`,
+                  color: C.clayInk,
                   borderRadius: 0,
                 }}
               >
