@@ -5792,6 +5792,8 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
       imgs,
     }) !== initialSnapshotRef.current;
   const guard = useDirtyBackGuard(isDirty, onClose);
+  const [lightboxIndex, setLightboxIndex] = useState(null);
+  useBackClose(lightboxIndex !== null, () => setLightboxIndex(null));
 
   const mixed = rate === 'mixed';
   const v8 = Number(incl8) || 0;
@@ -6257,10 +6259,12 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
                     className="relative"
                     style={{ width: '74px', height: '74px', backgroundColor: C.soft, border: `1px solid ${C.line}` }}
                   >
-                    {/* 圖片本身不能點（縮圖跟放大檢視是詳情頁才有的功能，
-                        這裡只是新增流程的預覽），刪除靠右上角疊一顆✕角標，
-                        跟詳情頁的縮圖列同一套樣式 */}
-                    <img src={src} alt="" className="h-full w-full object-cover" />
+                    <button
+                      onClick={() => setLightboxIndex(i)}
+                      className="block h-full w-full"
+                    >
+                      <img src={src} alt="" className="h-full w-full object-cover" />
+                    </button>
                     <span
                       className="absolute bottom-1 left-1 tabular-nums"
                       style={{ fontSize: '9.5px', color: C.sub }}
@@ -6268,7 +6272,10 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
                       {String(i + 1).padStart(2, '0')}
                     </span>
                     <button
-                      onClick={() => cap.removeImg(i)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        cap.removeImg(i);
+                      }}
                       className="absolute flex items-center justify-center"
                       style={{
                         top: '-1px',
@@ -6306,7 +6313,7 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
                 )}
               </div>
               <p className="mt-2" style={{ fontSize: '11px', lineHeight: 1.7, color: C.sub }}>
-                {t.photoDeleteHint(MAX_PHOTOS)}
+                {t.thumbHint(MAX_PHOTOS)}
               </p>
             </>
           ) : cap.photoDenied ? (
@@ -6350,6 +6357,31 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
     </FullScreenSheet>
 
     <PhotoCaptureSheets t={t} cap={cap} />
+
+    {lightboxIndex !== null && (
+      <PhotoLightbox
+        t={t}
+        shop={shop}
+        date={date}
+        photos={imgs}
+        index={lightboxIndex}
+        onIndexChange={setLightboxIndex}
+        onClose={() => setLightboxIndex(null)}
+        onDeletePhoto={(i) => {
+          const willBeEmpty = imgs.length <= 1;
+          cap.removeImg(i);
+          if (willBeEmpty) setLightboxIndex(null);
+          else setLightboxIndex((idx) => Math.min(idx, imgs.length - 2));
+        }}
+        onRotatePhoto={async (i) => {
+          try {
+            const rotated = await rotateImageSrc(imgs[i], 90);
+            setImgs((prev) => prev.map((p, pi) => (pi === i ? rotated : p)));
+          } catch (e) {}
+        }}
+      />
+    )}
+
     {guard.discardOpen && (
       <DiscardConfirmSheet
         t={t}
