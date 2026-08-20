@@ -2163,6 +2163,7 @@ export default function App() {
   const [tripSheet, setTripSheet] = useState(false);
   const [editingTripId, setEditingTripId] = useState(null);
   const [endedSheetOpen, setEndedSheetOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [tab, setTab] = useState('home');
   const [editing, setEditing] = useState(null);
   const [openId, setOpenId] = useState(null);
@@ -2181,6 +2182,7 @@ export default function App() {
   useBackClose(tab !== 'home', () => setTab('home'));
   useBackClose(tripSheet, () => setTripSheet(false));
   useBackClose(endedSheetOpen, () => setEndedSheetOpen(false));
+  useBackClose(menuOpen, () => setMenuOpen(false));
   useBackClose(!!openId, () => setOpenId(null));
   useBackClose(quizOn, () => setQuizOn(false));
   // editing（新增/編輯收據）跟 editingTripId（編輯行程）都不在這裡
@@ -2587,14 +2589,34 @@ export default function App() {
                 />
 
                 <button
-                  onClick={() => setTripSheet(true)}
+                  onClick={() => setMenuOpen((v) => !v)}
                   className="rounded-lg p-2"
-                  style={{ color: tripSheet ? C.blue : C.ink }}
+                  style={{ color: menuOpen ? C.blue : C.ink }}
                   aria-label={t.menu}
                 >
-                  <Menu size={20} />
+                  {menuOpen ? <X size={20} /> : <Menu size={20} />}
                 </button>
 
+                {menuOpen && (
+                  <MenuDropdown
+                    t={t}
+                    tab={tab}
+                    trip={activeTrip}
+                    itemCount={tripItems.length}
+                    onClose={() => setMenuOpen(false)}
+                    onGo={(k) => {
+                      setMenuOpen(false);
+                      deferOpen(() => {
+                        setTab(k);
+                        setQuizOn(false);
+                      });
+                    }}
+                    onTrips={() => {
+                      setMenuOpen(false);
+                      deferOpen(() => setTripSheet(true));
+                    }}
+                  />
+                )}
               </div>
             </div>
           </header>
@@ -2736,18 +2758,10 @@ export default function App() {
       {tripSheet && (
         <TripSheet
           t={t}
-          tab={tab}
           trips={trips}
           activeId={activeId}
           items={items}
           onClose={() => setTripSheet(false)}
-          onGo={(k) => {
-            setTripSheet(false);
-            deferOpen(() => {
-              setTab(k);
-              setQuizOn(false);
-            });
-          }}
           onSelect={(id) => {
             setActiveId(id);
             setTripSheet(false);
@@ -4736,9 +4750,92 @@ function BottomSheet({ onClose, children }) {
   );
 }
 
+// 選單：從 ≡ 按鈕下面浮出的小卡片（跟這顆按鈕錨定，不是貼底的
+// sheet），維持這個 app 一直以來的樣子——貼底面板留給行程切換這種
+// 需要整頁空間的內容用。五個主畫面各帶一行說明副標（沒有底部分頁
+// 列可以認圖示，這裡是唯一看得到全部功能的地方），目前那頁用填色
+// 「目前」標籤取代 ›；「切換行程」是摘要列，點了才另外開行程切換
+// 面板，不是把整個行程管理塞進這顆小卡片。
+function MenuDropdown({ t, tab, trip, itemCount, onClose, onGo, onTrips }) {
+  const navKeys = ['home', 'list', 'check', 'faq', 'set'];
+  const navTitleOf = {
+    home: t.nav.home,
+    list: t.receipts,
+    check: t.checkTitle,
+    faq: t.faqTitle,
+    set: t.settings,
+  };
+
+  return (
+    <>
+      <style>{`@keyframes jpMenuIn{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}`}</style>
+
+      <div className="fixed inset-0 z-30" onClick={onClose} />
+
+      <div
+        className="absolute right-0 z-40 overflow-hidden"
+        style={{
+          top: 'calc(100% + 8px)',
+          width: '17.5rem',
+          maxWidth: 'calc(100vw - 2rem)',
+          backgroundColor: C.card,
+          border: `1px solid ${C.line}`,
+          boxShadow: '0 12px 32px rgba(73,70,64,0.14)',
+          transformOrigin: 'top right',
+          animation: 'jpMenuIn 140ms ease-out',
+        }}
+      >
+        <div className="flex flex-col">
+          {navKeys.map((k, i) => {
+            const on = tab === k;
+            return (
+              <button
+                key={k}
+                onClick={() => onGo(k)}
+                className="flex items-center justify-between px-4 py-3 text-left"
+                style={{ borderTop: i === 0 ? 'none' : `1px solid ${C.line}` }}
+              >
+                <span>
+                  <span
+                    className="block text-sm"
+                    style={{ fontWeight: on ? 700 : 400, color: C.ink }}
+                  >
+                    {navTitleOf[k]}
+                  </span>
+                  <span className="mt-0.5 block" style={{ fontSize: '10.5px', color: C.sub }}>
+                    {t.navDesc[k]}
+                  </span>
+                </span>
+                {on ? (
+                  <Badge tone="blue">{t.menuCurrent}</Badge>
+                ) : (
+                  <span style={{ fontSize: '13px', color: C.sub }}>›</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        <button
+          onClick={onTrips}
+          className="flex w-full items-center justify-between px-4 py-3 text-left"
+          style={{ borderTop: `1px solid ${C.ink}` }}
+        >
+          <span>
+            <span className="block text-sm">{t.menuTrip}</span>
+            <span className="mt-0.5 block text-xs" style={{ color: C.sub }}>
+              {trip && trip.name ? trip.name : t.tripUnnamed} · {itemCount} {t.tripReceipts}
+            </span>
+          </span>
+          <ChevronRight size={14} style={{ color: C.sub }} />
+        </button>
+      </div>
+    </>
+  );
+}
+
 function TripSheet({
   t,
-  tab,
   trips,
   activeId,
   items,
@@ -4747,7 +4844,6 @@ function TripSheet({
   onCreate,
   onDelete,
   onEditTrip,
-  onGo,
 }) {
   const [name, setName] = useState('');
   const [departure, setDeparture] = useState('');
@@ -4761,15 +4857,6 @@ function TripSheet({
     .filter((x) => x.id !== activeId)
     .sort((a, b) => (b.departure || '').localeCompare(a.departure || ''));
 
-  const navKeys = ['home', 'list', 'check', 'faq', 'set'];
-  const navTitleOf = {
-    home: t.nav.home,
-    list: t.receipts,
-    check: t.checkTitle,
-    faq: t.faqTitle,
-    set: t.settings,
-  };
-
   return (
     <BottomSheet onClose={onClose}>
       <div className="flex items-center justify-between pb-4">
@@ -4779,40 +4866,6 @@ function TripSheet({
         <button onClick={onClose} style={{ color: C.sub }}>
           <X size={20} />
         </button>
-      </div>
-
-      {/* 選單併在這裡：沒有底部分頁列可以認圖示，這個面板是唯一看得
-          到全部功能的地方，五個主畫面各帶一行說明副標。目前所在的
-          那一頁用填色「目前」標籤取代 ›。 */}
-      <div className="flex flex-col">
-        {navKeys.map((k, i) => {
-          const on = tab === k;
-          return (
-            <button
-              key={k}
-              onClick={() => onGo(k)}
-              className="flex items-center justify-between py-3.5 text-left"
-              style={{ borderTop: i === 0 ? 'none' : `1px solid ${C.line}` }}
-            >
-              <span>
-                <span
-                  className="block"
-                  style={{ fontSize: '15px', fontWeight: on ? 700 : 400, color: C.ink }}
-                >
-                  {navTitleOf[k]}
-                </span>
-                <span className="mt-0.5 block" style={{ fontSize: '11px', color: C.sub }}>
-                  {t.navDesc[k]}
-                </span>
-              </span>
-              {on ? (
-                <Badge tone="blue">{t.menuCurrent}</Badge>
-              ) : (
-                <span style={{ fontSize: '13px', color: C.sub }}>›</span>
-              )}
-            </button>
-          );
-        })}
       </div>
 
       {active && (
