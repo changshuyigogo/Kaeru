@@ -207,7 +207,7 @@ function deferOpen(fn) {
 const MAIN_KEY = 'jptax:v2';
 const photoKey = (id) => `jptax:photo:${id}`;
 const STAGES = ['purchased', 'registered', 'verified', 'refunded'];
-const MAX_PHOTOS = 5; // 一張收據最多存幾張照片
+const MAX_PHOTOS = 4; // 一張收據最多存幾張照片
 
 // 日本有國際定期航線的機場約 34 座，只放這些，不追求完整——找不到就選
 // 「其他機場」，用預設 3 小時。region 是地區 key（對應 AIRPORT_REGIONS），
@@ -421,8 +421,7 @@ const T = {
     addOneMore: '再加 1 張',
     thumbHint: (n) => `點縮圖放大檢視，右上角 ✕ 刪除。最多 ${n} 張。`,
     photoDeleteHint: (n) => `右上角 ✕ 刪除。最多 ${n} 張。`,
-    photoStorageNote: '照片只存在這台裝置上。刪掉收據時照片會一起刪掉。',
-    share: '分享',
+    photoStorageNote: '這裡存的是另存的副本，只在這台裝置上，不是手機相簿裡的原始照片。刪掉收據時，App 裡的副本會一起刪掉。',
     zoomHint: '雙指縮放看細節',
     swipeHint: '左右滑動換照片',
     deletePhotoTitle: '刪除這張照片',
@@ -521,7 +520,7 @@ const T = {
     statusPending: '張待處理',
     statusRefunded: '張已退款',
     statusDead: '張失效',
-    deleteTripWarning: (n) => `刪除行程會一起刪掉這 ${n} 張收據和照片，無法復原。`,
+    deleteTripWarning: (n) => `刪除行程會一起刪掉這 ${n} 張收據和 App 裡存的照片副本，無法復原。`,
     emptyUnnamedKicker: '這趟行程',
     emptyUnnamedTitle: '還沒有名字',
     emptyUnnamedDesc:
@@ -733,8 +732,7 @@ const T = {
     addOneMore: 'もう 1 枚追加',
     thumbHint: (n) => `サムネイルをタップで拡大、右上の ✕ で削除。最大 ${n} 枚。`,
     photoDeleteHint: (n) => `右上の ✕ で削除。最大 ${n} 枚。`,
-    photoStorageNote: '写真はこの端末にだけ保存されます。レシートを削除すると写真も一緒に削除されます。',
-    share: '共有',
+    photoStorageNote: 'ここに保存されるのは複製で、この端末にだけ置かれます（スマホの写真アプリ内の元の写真ではありません）。レシートを削除すると、App 内の複製も一緒に削除されます。',
     zoomHint: 'ピンチで拡大',
     swipeHint: '左右にスワイプで切り替え',
     deletePhotoTitle: 'この写真を削除',
@@ -835,7 +833,7 @@ const T = {
     statusPending: '件 未処理',
     statusRefunded: '件 返金済み',
     statusDead: '件 失効',
-    deleteTripWarning: (n) => `旅程を削除すると、この ${n} 件のレシートと写真も一緒に削除されます。元に戻せません。`,
+    deleteTripWarning: (n) => `旅程を削除すると、この ${n} 件のレシートと App 内に保存された写真の複製も一緒に削除されます。元に戻せません。`,
     emptyUnnamedKicker: 'この旅程',
     emptyUnnamedTitle: 'まだ名前がありません',
     emptyUnnamedDesc:
@@ -5603,14 +5601,18 @@ function usePhotoCapture({ imgs, setImgs, onParsed }) {
   async function openLibrary() {
     setPhotoPromptOpen(false);
     try {
-      const picked = await Camera.pickImages({
+      // pickImages 是舊版 API，已標記 deprecated，多選在部分裝置上不
+      // 可靠；chooseFromGallery 才是目前真的支援多選的方法，要自己開
+      // allowMultipleSelection，不然預設是單選。
+      const picked = await Camera.chooseFromGallery({
+        allowMultipleSelection: true,
         limit: Math.max(1, remaining),
         quality: 80,
       });
-      const files = picked?.photos || [];
+      const files = picked?.results || [];
       for (const f of files.slice(0, remaining)) {
         try {
-          const src = await compressImageSrc(f.webPath || f.path);
+          const src = await compressImageSrc(f.webPath || f.uri);
           setImgs((p) => (p.length < MAX_PHOTOS ? [...p, src] : p));
         } catch (err) {}
       }
@@ -7316,17 +7318,6 @@ function PhotoLightbox({
     }
   }
 
-  async function share() {
-    try {
-      const res = await fetch(photos[index]);
-      const blob = await res.blob();
-      const file = new File([blob], `receipt-${index + 1}.jpg`, { type: blob.type });
-      if (navigator.share) await navigator.share({ files: [file] });
-    } catch (e) {
-      // 使用者取消分享，或裝置不支援 navigator.share，都直接忽略
-    }
-  }
-
   async function rotate() {
     setRotating(true);
     try {
@@ -7347,7 +7338,7 @@ function PhotoLightbox({
       <div
         className="flex items-center justify-between kaeru-pad py-3"
         style={{
-          paddingTop: 'max(12px, env(safe-area-inset-top))',
+          paddingTop: 'max(16px, calc(env(safe-area-inset-top) + 10px))',
           opacity: confirmDelete ? 0.4 : 1,
         }}
       >
@@ -7365,9 +7356,7 @@ function PhotoLightbox({
             {date} · {index + 1} ／ {photos.length}
           </p>
         </div>
-        <button onClick={share} style={{ color: '#FFFFFF', fontSize: '13px' }}>
-          {t.share}
-        </button>
+        <span style={{ width: '22px' }} />
       </div>
 
       <div
@@ -7433,7 +7422,7 @@ function PhotoLightbox({
           className="kaeru-pad flex items-start justify-between py-3"
           style={{
             borderTop: '1px solid rgba(255,255,255,0.25)',
-            paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
+            paddingBottom: 'max(16px, calc(env(safe-area-inset-bottom) + 10px))',
           }}
         >
           <div>
