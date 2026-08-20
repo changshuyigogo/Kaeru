@@ -33,6 +33,16 @@ import ReceiptScanner from './receiptScanner.js';
 ------------------------------------------------------------------ */
 let kaeruBackDepth = 0;
 const kaeruBackHandlers = new Set();
+// 有一層自己主動關（按了畫面上的按鈕/元件被拿掉）時，會呼叫
+// history.back() 把自己那筆 entry 吃掉，讓深度跟畫面對齊——但這樣
+// 一來也會產生一個「真的」popstate 事件。如果照樣把這個 popstate
+// 廣播給所有還在監聽的 handler，「現在變成最上層」的那一層（通常是
+// 剛關掉那層的父層）會誤判成「輪到我被使用者按返回關掉了」，然後
+// 也跟著關掉——結果是關一層、自動連著再關一層，甚至讓有未存變動的
+// 表單以為使用者要放棄。這個計數器記錄「接下來有幾個 popstate 是
+// 我們自己 history.back() 造成的、不是使用者真的按返回/滑動」，
+// 廣播前先扣掉，扣得到就直接吞掉，不發給任何 handler。
+let kaeruSuppressPop = 0;
 
 function useBackClose(isOpen, onClose) {
   const depthRef = useRef(null);
@@ -70,11 +80,13 @@ function useBackClose(isOpen, onClose) {
       kaeruBackHandlers.delete(handlePop);
       // depthRef.current 還是 myDepth，代表這層不是被 popstate 關掉
       // 的（是按了畫面上的按鈕，或元件被拿掉）——把剛剛推的那筆吃掉，
-      // 讓堆疊深度跟畫面對齊。
+      // 讓堆疊深度跟畫面對齊，同時記一筆「這個 popstate 不用發給任何
+      // handler」，避免波及現在變成最上層的那一層。
       if (depthRef.current === myDepth) {
         depthRef.current = null;
         if (kaeruBackDepth === myDepth) kaeruBackDepth -= 1;
         if (window.history.state && window.history.state.kaeruDepth === myDepth) {
+          kaeruSuppressPop += 1;
           window.history.back();
         }
       }
@@ -84,6 +96,10 @@ function useBackClose(isOpen, onClose) {
 
 if (typeof window !== 'undefined') {
   window.addEventListener('popstate', () => {
+    if (kaeruSuppressPop > 0) {
+      kaeruSuppressPop -= 1;
+      return;
+    }
     for (const fn of kaeruBackHandlers) fn();
   });
 }
@@ -342,8 +358,8 @@ const T = {
     addFirst: '新增第一張收據',
     departChecklist: '回程當天流程',
     step1: (hrsText) => `提早 ${hrsText}到機場，行李先不要託運`,
-    step2: '連上國際線出發大廳的專用無線網路，登入 VJW',
-    step3: '在免稅手續機台掃描護照，等綠色或紅色判定',
+    step2: '連上國際線出發大廳的專用無線網路，開啟 VJW',
+    step3: '用 VJW 辦海關確認，或到自助機台掃護照',
     step4: '判定通過後再去航空公司櫃檯託運行李',
     receipts: '收據',
     addReceipt: '新增收據',
@@ -398,6 +414,7 @@ const T = {
     doneReorder: '完成',
     addOneMore: '再加 1 張',
     thumbHint: (n) => `點縮圖放大檢視，右上角 ✕ 刪除。最多 ${n} 張。`,
+    photoDeleteHint: (n) => `右上角 ✕ 刪除。最多 ${n} 張。`,
     photoStorageNote: '照片只存在這台裝置上。刪掉收據時照片會一起刪掉。',
     share: '分享',
     zoomHint: '雙指縮放看細節',
@@ -648,8 +665,8 @@ const T = {
     addFirst: '最初のレシートを追加',
     departChecklist: '出発当日の流れ',
     step1: (hrsText) => `${hrsText}前に空港へ。荷物はまだ預けない`,
-    step2: '国際線出発ロビーの専用無線 LAN に接続し VJW にログイン',
-    step3: '免税手続用の端末でパスポートを読み取り、判定を待つ',
+    step2: '国際線出発ロビーの専用無線 LAN に接続し VJW を開く',
+    step3: 'VJW で税関確認、または端末でパスポートを読み取る',
     step4: '判定後に航空会社カウンターで荷物を預ける',
     receipts: 'レシート',
     addReceipt: 'レシートを追加',
@@ -709,6 +726,7 @@ const T = {
     doneReorder: '完了',
     addOneMore: 'もう 1 枚追加',
     thumbHint: (n) => `サムネイルをタップで拡大、右上の ✕ で削除。最大 ${n} 枚。`,
+    photoDeleteHint: (n) => `右上の ✕ で削除。最大 ${n} 枚。`,
     photoStorageNote: '写真はこの端末にだけ保存されます。レシートを削除すると写真も一緒に削除されます。',
     share: '共有',
     zoomHint: 'ピンチで拡大',
@@ -973,6 +991,22 @@ const QA = [
   },
   {
     sec: 'exit',
+    q: { zh: '什麼是 VJW，要先辦嗎？', ja: 'VJW とは何ですか。先に登録が必要ですか。' },
+    a: {
+      zh: 'Visit Japan Web，日本官方的入出境線上服務，出發前先註冊比較省時間。成田、羽田、關西、中部、新千歲、福岡、那霸這 7 個機場，連上機場指定 WiFi 後可以直接用手機辦海關確認，不必排自助機台。其他機場還是走機台。',
+      ja: 'Visit Japan Web は日本の公式な出入国オンラインサービスです。出発前に登録しておくと時間の節約になります。成田・羽田・関西・中部・新千歳・福岡・那覇の 7 空港では、空港指定の Wi-Fi に接続すればスマートフォンでそのまま税関確認ができ、端末に並ぶ必要がありません。その他の空港は引き続き端末での手続になります。',
+    },
+  },
+  {
+    sec: 'exit',
+    q: { zh: 'VJW 看得到退款進度嗎？', ja: 'VJW で返金の進み具合は確認できますか。' },
+    a: {
+      zh: '看不到。VJW 只顯示免稅店的購買紀錄和海關確認結果，退款方式有沒有登記、錢有沒有真的退回來，都不會出現。這兩段要自己記，Kaeru 就是在管這件事。',
+      ja: 'できません。VJW に表示されるのは免税店の購入記録と税関確認の結果だけです。返金方法を登録したかどうか、実際に返金されたかどうかは表示されません。この 2 つは自分で管理する必要があり、それがまさに Kaeru の役目です。',
+    },
+  },
+  {
+    sec: 'exit',
     q: { zh: '什麼時候辦海關查驗？', ja: '税関確認はいつ行いますか。' },
     a: {
       zh: '託運行李之前。一旦把行李交給航空公司就拉不回來了，要提早到機場先辦完。',
@@ -985,17 +1019,6 @@ const QA = [
     a: {
       zh: '在託運櫃檯前的國際線出發大廳一帶。',
       ja: '手荷物預け入れ前の国際線出発ロビー等に設置されます。',
-    },
-  },
-  {
-    sec: 'exit',
-    q: {
-      zh: '可以用 Visit Japan Web 線上辦嗎？',
-      ja: 'Visit Japan Web で手続できますか。',
-    },
-    a: {
-      zh: '成田、羽田、關西、中部、福岡、新千歲、那霸這幾個機場，在保安檢查前、連上手續專用無線網路的區域內可以線上辦，取代機台。',
-      ja: '成田・羽田・関西・中部・福岡・新千歳・那覇では、保安検査場前の手続専用無線 LAN エリア内でオンライン手続が可能です。',
     },
   },
   {
@@ -1076,23 +1099,11 @@ const QA = [
   },
 ];
 
+// 只留一條：加了「出境時」的 VJW 兩題之後，390×844 單頁剛好滿，其他
+// 幾條小撇步（分開結帳、湊 5,000 円、集中放同一袋）跟已經有的 FAQ
+// 問答重疊或另外佔位置，先拿掉。留這條是因為跟 App 本身的功能直接
+// 相關，其他 FAQ 問答都沒提到。
 const TIPS = [
-  {
-    zh: '打算在日本吃掉、用掉的東西，結帳時跟要帶回國的分開結，讓它自己一張收據。查驗是看單張收據，分開結就算吃掉也只損失那張。同一間店同一天的稅抜金額仍會合計算門檻，不影響達標，不過各店做法可能不同，結帳時先問店員。',
-    ja: '国内で消費する予定の物は、持ち帰る物と分けて会計し別のレシートにします。税関確認はレシート単位なので、消費しても損失はそのレシートだけに収まります。5,000 円の判定は同一店舗・同一日の合算なので影響しません。',
-  },
-  {
-    zh: '差一點沒到 5,000 円的時候，當天回同一間店補買可以合併計算，隔天就不算了。',
-    ja: '5,000 円に少し足りない場合、同じ日に同じ店で買い足せば合算されます。翌日は合算されません。',
-  },
-  {
-    zh: '出發前一晚把要查驗的商品集中放在同一個袋子。機台判定紅色時要到海關檢查場把商品拿出來，分散在各處會很花時間。',
-    ja: '出発前夜に対象商品を一つの袋にまとめておきます。レッド判定の場合は税関検査場で提示が必要です。',
-  },
-  {
-    zh: '入境前後先在 VJW 登記好，出境時可以直接線上辦免稅手續，不用排機台。',
-    ja: '入国前後に VJW へ登録しておくと、出国時にオンラインで手続でき、端末に並ばずに済みます。',
-  },
   {
     zh: '紙本收據容易皺、容易褪色，買完順手拍照存在這個 App 裡比較保險。',
     ja: '紙のレシートは折れたり退色したりします。購入後すぐ写真を撮って保存しておくと安心です。',
@@ -2152,7 +2163,6 @@ export default function App() {
   const [tripSheet, setTripSheet] = useState(false);
   const [editingTripId, setEditingTripId] = useState(null);
   const [endedSheetOpen, setEndedSheetOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [tab, setTab] = useState('home');
   const [editing, setEditing] = useState(null);
   const [openId, setOpenId] = useState(null);
@@ -2171,7 +2181,6 @@ export default function App() {
   useBackClose(tab !== 'home', () => setTab('home'));
   useBackClose(tripSheet, () => setTripSheet(false));
   useBackClose(endedSheetOpen, () => setEndedSheetOpen(false));
-  useBackClose(menuOpen, () => setMenuOpen(false));
   useBackClose(!!openId, () => setOpenId(null));
   useBackClose(quizOn, () => setQuizOn(false));
   // editing（新增/編輯收據）跟 editingTripId（編輯行程）都不在這裡
@@ -2494,7 +2503,7 @@ export default function App() {
         className="kaeru-app"
         style={{
           backgroundColor: C.page,
-          opacity: tripSheet || endedSheetOpen || menuOpen ? 0.35 : 1,
+          opacity: tripSheet || endedSheetOpen ? 0.35 : 1,
           transition: 'opacity 200ms',
         }}
       >
@@ -2578,12 +2587,12 @@ export default function App() {
                 />
 
                 <button
-                  onClick={() => setMenuOpen((v) => !v)}
+                  onClick={() => setTripSheet(true)}
                   className="rounded-lg p-2"
-                  style={{ color: menuOpen ? C.blue : C.ink }}
+                  style={{ color: tripSheet ? C.blue : C.ink }}
                   aria-label={t.menu}
                 >
-                  {menuOpen ? <X size={20} /> : <Menu size={20} />}
+                  <Menu size={20} />
                 </button>
 
               </div>
@@ -2724,35 +2733,21 @@ export default function App() {
         </div>
       )}
 
-      {menuOpen && (
-        <MenuSheet
+      {tripSheet && (
+        <TripSheet
           t={t}
           tab={tab}
-          trip={activeTrip}
-          itemCount={tripItems.length}
-          tripCount={trips.length}
-          onClose={() => setMenuOpen(false)}
+          trips={trips}
+          activeId={activeId}
+          items={items}
+          onClose={() => setTripSheet(false)}
           onGo={(k) => {
-            setMenuOpen(false);
+            setTripSheet(false);
             deferOpen(() => {
               setTab(k);
               setQuizOn(false);
             });
           }}
-          onTrips={() => {
-            setMenuOpen(false);
-            deferOpen(() => setTripSheet(true));
-          }}
-        />
-      )}
-
-      {tripSheet && (
-        <TripSheet
-          t={t}
-          trips={trips}
-          activeId={activeId}
-          items={items}
-          onClose={() => setTripSheet(false)}
           onSelect={(id) => {
             setActiveId(id);
             setTripSheet(false);
@@ -3967,7 +3962,10 @@ function FaqRow({ item, lang, open, onToggle }) {
 }
 
 function FaqView({ t, lang, onStart }) {
-  const [open, setOpen] = useState(null);
+  // 每一區各自最多展開一題，互不影響——不是整頁只能開一題。預設值
+  // 是每區第一題，加了「出境時」的 VJW 兩題之後，「消費稅是幾 %？」
+  // 排到 buy 區第二題，不再是預設展開的那一題。
+  const [open, setOpen] = useState({ buy: 'buy-0', exit: 'exit-0', refund: 'refund-0' });
   const sections = ['buy', 'exit', 'refund'];
 
   return (
@@ -3983,8 +3981,13 @@ function FaqView({ t, lang, onStart }) {
                   key={key}
                   item={item}
                   lang={lang}
-                  open={open === key}
-                  onToggle={() => setOpen(open === key ? null : key)}
+                  open={open[sec] === key}
+                  onToggle={() =>
+                    setOpen((prev) => ({
+                      ...prev,
+                      [sec]: prev[sec] === key ? null : key,
+                    }))
+                  }
                 />
               );
             })}
@@ -4733,103 +4736,9 @@ function BottomSheet({ onClose, children }) {
   );
 }
 
-// 畫面41：選單改成貼底面板，沿用行程切換那套視覺（底層 opacity:.35、
-// 遮罩、border-top 實色不做圓角）。副標不是裝飾——沒有底部分頁列可以
-// 認圖示，選單是唯一看得到全部功能的地方，所以每個主畫面都帶一行
-// 說明。目前所在的那一頁用填色「目前」標籤取代 ›。
-function MenuSheet({ t, tab, trip, itemCount, tripCount, onClose, onGo, onTrips }) {
-  const rowKeys = ['home', 'list', 'check', 'faq', 'set'];
-  const titleOf = {
-    home: t.nav.home,
-    list: t.receipts,
-    check: t.checkTitle,
-    faq: t.faqTitle,
-    set: t.settings,
-  };
-
-  return (
-    <BottomSheet onClose={onClose}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <FrogMark size={26} />
-          <div>
-            <div
-              className="font-semibold"
-              style={{
-                fontSize: '12.5px',
-                letterSpacing: '0.28em',
-                color: C.blueDeep,
-                textTransform: 'uppercase',
-              }}
-            >
-              {t.appName}
-            </div>
-            <div className="mt-0.5" style={{ fontSize: '11px', color: C.sub }}>
-              {trip && trip.name ? trip.name : t.tripUnnamed} · {itemCount} {t.tripReceipts}
-            </div>
-          </div>
-        </div>
-        <button onClick={onClose} style={{ color: C.sub }}>
-          <X size={15} />
-        </button>
-      </div>
-
-      <div className="mt-4.5 flex flex-col">
-        {rowKeys.map((k, i) => {
-          const on = tab === k;
-          return (
-            <button
-              key={k}
-              onClick={() => onGo(k)}
-              className="flex items-center justify-between py-3.5 text-left"
-              style={{ borderTop: `1px solid ${i === 0 ? C.ink : C.line}` }}
-            >
-              <span>
-                <span
-                  className="block"
-                  style={{ fontSize: '15px', fontWeight: on ? 700 : 400, color: C.ink }}
-                >
-                  {titleOf[k]}
-                </span>
-                <span className="mt-0.5 block" style={{ fontSize: '11px', color: C.sub }}>
-                  {t.navDesc[k]}
-                </span>
-              </span>
-              {on ? (
-                <Badge tone="blue">{t.menuCurrent}</Badge>
-              ) : (
-                <span style={{ fontSize: '13px', color: C.sub }}>›</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      <button
-        onClick={onTrips}
-        className="flex w-full items-center justify-between text-left"
-        style={{
-          marginTop: '16px',
-          borderTop: `1px solid ${C.ink}`,
-          paddingTop: '14px',
-        }}
-      >
-        <span>
-          <span className="block" style={{ fontSize: '14px', color: C.ink }}>
-            {t.menuTrip}
-          </span>
-          <span className="mt-0.5 block" style={{ fontSize: '11px', color: C.sub }}>
-            {tripCount} {t.tripCountUnit}
-          </span>
-        </span>
-        <span style={{ fontSize: '13px', color: C.sub }}>›</span>
-      </button>
-    </BottomSheet>
-  );
-}
-
 function TripSheet({
   t,
+  tab,
   trips,
   activeId,
   items,
@@ -4838,6 +4747,7 @@ function TripSheet({
   onCreate,
   onDelete,
   onEditTrip,
+  onGo,
 }) {
   const [name, setName] = useState('');
   const [departure, setDeparture] = useState('');
@@ -4851,6 +4761,15 @@ function TripSheet({
     .filter((x) => x.id !== activeId)
     .sort((a, b) => (b.departure || '').localeCompare(a.departure || ''));
 
+  const navKeys = ['home', 'list', 'check', 'faq', 'set'];
+  const navTitleOf = {
+    home: t.nav.home,
+    list: t.receipts,
+    check: t.checkTitle,
+    faq: t.faqTitle,
+    set: t.settings,
+  };
+
   return (
     <BottomSheet onClose={onClose}>
       <div className="flex items-center justify-between pb-4">
@@ -4860,6 +4779,40 @@ function TripSheet({
         <button onClick={onClose} style={{ color: C.sub }}>
           <X size={20} />
         </button>
+      </div>
+
+      {/* 選單併在這裡：沒有底部分頁列可以認圖示，這個面板是唯一看得
+          到全部功能的地方，五個主畫面各帶一行說明副標。目前所在的
+          那一頁用填色「目前」標籤取代 ›。 */}
+      <div className="flex flex-col">
+        {navKeys.map((k, i) => {
+          const on = tab === k;
+          return (
+            <button
+              key={k}
+              onClick={() => onGo(k)}
+              className="flex items-center justify-between py-3.5 text-left"
+              style={{ borderTop: i === 0 ? 'none' : `1px solid ${C.line}` }}
+            >
+              <span>
+                <span
+                  className="block"
+                  style={{ fontSize: '15px', fontWeight: on ? 700 : 400, color: C.ink }}
+                >
+                  {navTitleOf[k]}
+                </span>
+                <span className="mt-0.5 block" style={{ fontSize: '11px', color: C.sub }}>
+                  {t.navDesc[k]}
+                </span>
+              </span>
+              {on ? (
+                <Badge tone="blue">{t.menuCurrent}</Badge>
+              ) : (
+                <span style={{ fontSize: '13px', color: C.sub }}>›</span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {active && (
@@ -6193,46 +6146,66 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
 
         <Field label={t.photo} as="div">
           {imgs.length > 0 ? (
-            <div className="flex flex-wrap items-start gap-2">
-              {imgs.map((src, i) => (
-                <div
-                  key={i}
-                  style={{ width: '74px', margin: '4px' }}
-                >
-                  {/* 圖片本身完全不能點，刪除是下面獨立一顆按鈕，兩者
-                      之間留真的間距，不共用點擊區——手機瀏覽器會把小按鈕
-                      的可點範圍自動撐大，疊在照片上一定會誤觸 */}
-                  <img
-                    src={src}
-                    alt=""
-                    className="block w-full object-cover"
-                    style={{ height: '74px', border: `1px solid ${C.line}` }}
-                  />
-                  <button
-                    onClick={() => cap.removeImg(i)}
-                    className="mt-1 flex w-full items-center justify-center gap-1"
-                    style={{ color: C.clayInk, fontSize: '11px', padding: '2px 0' }}
+            <>
+              <div className="flex flex-wrap gap-2">
+                {imgs.map((src, i) => (
+                  <div
+                    key={i}
+                    className="relative"
+                    style={{ width: '74px', height: '74px', backgroundColor: C.soft, border: `1px solid ${C.line}` }}
                   >
-                    <X size={10} />
-                    {t.delete}
+                    {/* 圖片本身不能點（縮圖跟放大檢視是詳情頁才有的功能，
+                        這裡只是新增流程的預覽），刪除靠右上角疊一顆✕角標，
+                        跟詳情頁的縮圖列同一套樣式 */}
+                    <img src={src} alt="" className="h-full w-full object-cover" />
+                    <span
+                      className="absolute bottom-1 left-1 tabular-nums"
+                      style={{ fontSize: '9.5px', color: C.sub }}
+                    >
+                      {String(i + 1).padStart(2, '0')}
+                    </span>
+                    <button
+                      onClick={() => cap.removeImg(i)}
+                      className="absolute flex items-center justify-center"
+                      style={{
+                        top: '-1px',
+                        right: '-1px',
+                        width: '44px',
+                        height: '44px',
+                        marginTop: '-12px',
+                        marginRight: '-12px',
+                        paddingBottom: '12px',
+                        paddingLeft: '12px',
+                      }}
+                    >
+                      <span
+                        className="flex items-center justify-center"
+                        style={{ width: '20px', height: '20px', backgroundColor: C.ink, color: '#FFFFFF' }}
+                      >
+                        <X size={12} />
+                      </span>
+                    </button>
+                  </div>
+                ))}
+                {cap.remaining > 0 && (
+                  <button
+                    onClick={cap.pickPhoto}
+                    className="flex items-center justify-center"
+                    style={{
+                      width: '74px',
+                      height: '74px',
+                      border: `1px dashed ${C.line}`,
+                      color: C.sub,
+                    }}
+                  >
+                    <Plus size={18} />
                   </button>
-                </div>
-              ))}
-              {cap.remaining > 0 && (
-                <button
-                  onClick={cap.pickPhoto}
-                  className="flex items-center justify-center"
-                  style={{
-                    width: '74px',
-                    height: '74px',
-                    border: `1px dashed ${C.line}`,
-                    color: C.sub,
-                  }}
-                >
-                  <Plus size={18} />
-                </button>
-              )}
-            </div>
+                )}
+              </div>
+              <p className="mt-2" style={{ fontSize: '11px', lineHeight: 1.7, color: C.sub }}>
+                {t.photoDeleteHint(MAX_PHOTOS)}
+              </p>
+            </>
           ) : cap.photoDenied ? (
             <p style={{ color: C.sub, fontSize: '13px', lineHeight: 1.8 }}>
               {cap.photoDenied === 'camera' ? t.cameraDenied : t.photoDenied}
