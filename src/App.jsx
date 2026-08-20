@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
+  Home,
   Rows3,
+  ScanLine,
+  HelpCircle,
+  Settings as Cog,
   Plus,
   X,
   Trash2,
@@ -9,10 +13,12 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
+  Globe,
   RefreshCw,
   ArrowLeft,
   Menu,
   Calendar as CalIcon,
+  MapPin,
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
@@ -2600,9 +2606,9 @@ export default function App() {
                 {menuOpen && (
                   <MenuDropdown
                     t={t}
+                    lang={lang}
                     tab={tab}
                     trip={activeTrip}
-                    itemCount={tripItems.length}
                     onClose={() => setMenuOpen(false)}
                     onGo={(k) => {
                       setMenuOpen(false);
@@ -2611,10 +2617,20 @@ export default function App() {
                         setQuizOn(false);
                       });
                     }}
+                    onAdd={() => {
+                      setMenuOpen(false);
+                      deferOpen(() => setEditing('new'));
+                    }}
                     onTrips={() => {
                       setMenuOpen(false);
                       deferOpen(() => setTripSheet(true));
                     }}
+                    onLang={() =>
+                      setSettings((s) => ({
+                        ...s,
+                        lang: s.lang === 'zh' ? 'ja' : 'zh',
+                      }))
+                    }
                   />
                 )}
               </div>
@@ -4750,21 +4766,26 @@ function BottomSheet({ onClose, children }) {
   );
 }
 
-// 選單：從 ≡ 按鈕下面浮出的小卡片（跟這顆按鈕錨定，不是貼底的
-// sheet），維持這個 app 一直以來的樣子——貼底面板留給行程切換這種
-// 需要整頁空間的內容用。五個主畫面各帶一行說明副標（沒有底部分頁
-// 列可以認圖示，這裡是唯一看得到全部功能的地方），目前那頁用填色
-// 「目前」標籤取代 ›；「切換行程」是摘要列，點了才另外開行程切換
-// 面板，不是把整個行程管理塞進這顆小卡片。
-function MenuDropdown({ t, tab, trip, itemCount, onClose, onGo, onTrips }) {
-  const navKeys = ['home', 'list', 'check', 'faq', 'set'];
-  const navTitleOf = {
-    home: t.nav.home,
-    list: t.receipts,
-    check: t.checkTitle,
-    faq: t.faqTitle,
-    set: t.settings,
-  };
+function MenuDropdown({
+  t,
+  lang,
+  tab,
+  trip,
+  onClose,
+  onGo,
+  onAdd,
+  onTrips,
+  onLang,
+}) {
+  const rows = [
+    ['home', Home],
+    ['list', Rows3],
+    ['check', ScanLine],
+    ['faq', HelpCircle],
+    ['set', Cog],
+  ];
+
+  const rowCls = 'flex w-full items-center gap-3 px-4 py-3 text-left';
 
   return (
     <>
@@ -4773,7 +4794,7 @@ function MenuDropdown({ t, tab, trip, itemCount, onClose, onGo, onTrips }) {
       <div className="fixed inset-0 z-30" onClick={onClose} />
 
       <div
-        className="absolute right-0 z-40 overflow-hidden"
+        className="absolute right-0 z-40 overflow-hidden rounded-2xl"
         style={{
           top: 'calc(100% + 8px)',
           width: '17.5rem',
@@ -4785,32 +4806,48 @@ function MenuDropdown({ t, tab, trip, itemCount, onClose, onGo, onTrips }) {
           animation: 'jpMenuIn 140ms ease-out',
         }}
       >
-        <div className="flex flex-col">
-          {navKeys.map((k, i) => {
+        <div className="p-3">
+          <button
+            onClick={onAdd}
+            className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold"
+            style={{ backgroundColor: C.blue, color: '#FFFFFF' }}
+          >
+            <Plus size={16} /> {t.menuAdd}
+          </button>
+        </div>
+
+        <div style={{ borderTop: `1px solid ${C.line}` }}>
+          {rows.map(([k, Icon], i) => {
             const on = tab === k;
             return (
               <button
                 key={k}
                 onClick={() => onGo(k)}
-                className="flex items-center justify-between px-4 py-3 text-left"
-                style={{ borderTop: i === 0 ? 'none' : `1px solid ${C.line}` }}
+                className={rowCls}
+                style={{
+                  borderTop: i === 0 ? 'none' : `1px solid ${C.line}`,
+                  backgroundColor: on ? C.blueSoft : 'transparent',
+                }}
               >
-                <span>
+                <Icon
+                  size={17}
+                  style={{ color: on ? C.blue : C.sub }}
+                  strokeWidth={on ? 2.2 : 1.7}
+                />
+                <span className="flex-1">
                   <span
                     className="block text-sm"
-                    style={{ fontWeight: on ? 700 : 400, color: C.ink }}
+                    style={{ color: on ? C.blueDeep : C.ink }}
                   >
-                    {navTitleOf[k]}
+                    {t.nav[k]}
                   </span>
-                  <span className="mt-0.5 block" style={{ fontSize: '10.5px', color: C.sub }}>
+                  <span
+                    className="mt-0.5 block text-xs leading-5"
+                    style={{ color: C.sub }}
+                  >
                     {t.navDesc[k]}
                   </span>
                 </span>
-                {on ? (
-                  <Badge tone="blue">{t.menuCurrent}</Badge>
-                ) : (
-                  <span style={{ fontSize: '13px', color: C.sub }}>›</span>
-                )}
               </button>
             );
           })}
@@ -4818,16 +4855,29 @@ function MenuDropdown({ t, tab, trip, itemCount, onClose, onGo, onTrips }) {
 
         <button
           onClick={onTrips}
-          className="flex w-full items-center justify-between px-4 py-3 text-left"
-          style={{ borderTop: `1px solid ${C.ink}` }}
+          className={rowCls}
+          style={{ borderTop: `1px solid ${C.line}` }}
         >
-          <span>
+          <MapPin size={17} style={{ color: C.sub }} strokeWidth={1.7} />
+          <span className="flex-1">
             <span className="block text-sm">{t.menuTrip}</span>
             <span className="mt-0.5 block text-xs" style={{ color: C.sub }}>
-              {trip && trip.name ? trip.name : t.tripUnnamed} · {itemCount} {t.tripReceipts}
+              {trip && trip.name ? trip.name : t.tripNow}
             </span>
           </span>
           <ChevronRight size={14} style={{ color: C.sub }} />
+        </button>
+
+        <button
+          onClick={onLang}
+          className={rowCls}
+          style={{ borderTop: `1px solid ${C.line}` }}
+        >
+          <Globe size={17} style={{ color: C.sub }} strokeWidth={1.7} />
+          <span className="flex-1 text-sm">{t.menuLang}</span>
+          <span className="text-xs font-medium" style={{ color: C.blueDeep }}>
+            {lang === 'zh' ? '日本語' : '中文'}
+          </span>
         </button>
       </div>
     </>
