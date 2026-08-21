@@ -1496,7 +1496,16 @@ const netOfItem = (it) =>
   it.rate === 'mixed'
     ? netOf(it.incl8 || 0, 8) + netOf(it.incl10 || 0, 10)
     : netOf(it.incl, it.rate);
-const todayStr = () => new Date().toISOString().slice(0, 10);
+// 故意不用 toISOString()——那個是 UTC 日期，在台灣/日本這種 UTC+8/+9
+// 的時區，每天凌晨到早上這段時間會被算成「昨天」，直接影響新增收據
+// 預設的購買日期跟 90 天期限起算點。用 getFullYear/Month/Date 拿本機
+// 時區的日期。
+const todayStr = () => {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+};
 const groupKey = (it) => `${(it.shop || '').trim()}||${it.date}`;
 
 function daysLeft(dateStr) {
@@ -2375,7 +2384,10 @@ export default function App() {
       const eligible = g && g.ok && !it.consumed;
       if (eligible && it.status !== 'refunded') refundable += taxOf(it);
       if (eligible && it.status === 'refunded') refundedTax += taxOf(it);
-      if (it.status !== 'refunded') {
+      // 已在境內吃掉/用掉的收據退不了稅，不算「還沒處理」，跟
+      // tripStatsFor 的 pending 判斷一致，不然首頁「還沒處理」的張數
+      // 跟最近到期倒數，會把已經失效、退不了稅的收據也算進去。
+      if (it.status !== 'refunded' && !it.consumed) {
         pendingCount++;
         const d = daysLeft(it.date);
         if (d !== null && (minDays === null || d < minDays)) minDays = d;
@@ -2859,7 +2871,7 @@ export default function App() {
           onClose={() => setOpenId(null)}
           onEdit={(it) => {
             setOpenId(null);
-            setEditing(it);
+            deferOpen(() => setEditing(it));
           }}
           onStatus={(st) =>
             setItems((prev) =>
@@ -3498,7 +3510,7 @@ function ListView({ t, items, groups, taxOf, settings, onOpen, onAdd }) {
     if (filter === 'all') return true;
     if (filter === 'short') return !(g && g.ok);
     if (filter === 'done') return it.status === 'refunded';
-    if (filter === 'todo') return it.status !== 'refunded';
+    if (filter === 'todo') return it.status !== 'refunded' && !it.consumed;
     return true;
   };
 
@@ -5634,7 +5646,12 @@ function usePhotoCapture({ imgs, setImgs, onParsed }) {
       if (!images.length) return;
       const [first, ...rest] = images;
       setConfirmPhoto({ src: first, fromScan: true });
-      for (const raw of rest.slice(0, remaining - 1)) {
+      // remaining 是「開始掃描那一刻」還剩幾張額度，第一頁留給確認/
+      // 裁切畫面用，其他頁最多再補 remaining-1 張——如果那時候額度已經
+      // 是 0（滿額才點掃描），remaining-1 會是負數，array.slice(0,-1)
+      // 在 JS 裡的意思是「除了最後一項」，不是「空陣列」，要用
+      // Math.max(0, ...) 夾住，不然滿額時點掃描還是會多塞幾張進來。
+      for (const raw of rest.slice(0, Math.max(0, remaining - 1))) {
         try {
           const src = await compressImageSrc(raw);
           setImgs((p) => (p.length < MAX_PHOTOS ? [...p, src] : p));
@@ -5857,7 +5874,9 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
     let status = initial?.status || 'purchased';
     if (refundReg && STAGES.indexOf(status) < 1) status = 'registered';
     if (!refundReg && STAGES.indexOf(status) === 1) status = 'purchased';
-    if (consumed && STAGES.indexOf(status) > 1) status = 'registered';
+    // 只把「已查驗」退回「已登記」——已經退款是既成事實，事後補記
+    // 「這張也在境內用掉了」不該把已經拿到手的退款記錄洗掉。
+    if (consumed && status === 'verified') status = 'registered';
 
     let finalRate = rate;
     let finalIncl = effectiveIncl;
