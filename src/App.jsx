@@ -370,7 +370,7 @@ const T = {
     receipts: '收據',
     addReceipt: '新增收據',
     groupHint: '同一間店、同一天會合併計算稅抜金額',
-    filters: { all: '全部', todo: '待處理', short: '未達標', done: '已完成' },
+    filters: { all: '全部', pending: '待補', todo: '待處理', done: '已完成' },
     noMatch: '這個篩選沒有符合的收據。',
     reached: '已達 5,000 円',
     notReached: '未達 5,000 円',
@@ -569,8 +569,8 @@ const T = {
     menuAdd: '新增收據',
     menuCurrent: '目前',
     tripCountUnit: '趟行程',
-    sim: '情境模擬：一趟大阪之旅',
-    simSub: '六個決定，看你最後能退多少',
+    sim: '試走一趟大阪',
+    simSub: '跟著走一趟，看你能退多少',
     startSim: '開始這趟旅程',
     simStep: '決定',
     simGot: '你退到',
@@ -636,6 +636,48 @@ const T = {
     clearAll: '清空所有資料',
     clearConfirm: '確定要清空？這個動作沒辦法復原。',
     source: '規則依據：観光庁 消費税免税店サイト',
+
+    // ---- 2b 體驗調整 ----
+    todayActionTitle: '今天要辦的事',
+    todayActionLine: (n) => `還有 ${n} 張沒辦完`,
+    todayActionDone: '都辦完了',
+    goCheck: '去核對',
+    deadlineBannerTitle: (n, days) => `${n} 張收據 ${days} 天後過期`,
+    deadlineBannerDetail: (amount, shop) => `¥${amount} 拿不回來 · ${shop}`,
+    expiredBadge: '已過期',
+    filterPendingBanner: (n) => `${n} 張資料待補`,
+    filterPendingBannerDesc: '待補的收據不算進預估可退稅額。有空時補上店名和日期。',
+    pendingShopPlaceholder: '店名待補',
+    pendingCapturedOn: (date) => `${date} 拍的`,
+    pendingBadge: '資料待補',
+    pendingFillLink: '補上店名和日期',
+    quickAddTitle: '拍好了',
+    quickAddSave: '存起來',
+    quickAddGotAmount: '讀到金額了',
+    quickAddReadIncl: '從照片讀到的含稅金額',
+    quickAddRateLine: (rate, net, tax) => `稅率 ${rate}% · 稅抜 ¥${net} · 稅額 ¥${tax}`,
+    refundQ: '這張在店裡登記退款方式了嗎？',
+    refundOptRegistered: '有登記',
+    refundOptNo: '沒有',
+    refundOptUnsure: '不確定',
+    refundHint: '最容易漏掉的一步。沒登記的話，錢不會自動退。',
+    pendingFieldsLabel: '店名和日期',
+    pendingFieldsDesc: '照片讀不到，晚點再補',
+    quickSaveCta: '存起來，晚點再補',
+    quickFullFormCta: '現在就填完整資料',
+    refundCheckTitle: '錢進來了嗎',
+    refundCheckSubtitle: (tripName, days) => `${tripName} · 回程後 ${days} 天`,
+    refundCheckDesc: (n) =>
+      `這趟有 ${n} 張收據通過查驗了。錢已經進帳的請勾起來，這樣才知道還在等哪幾筆。`,
+    refundCheckWaiting: '還在等',
+    refundCheckInfo:
+      '退款由免稅店或它委託的退款業者處理，入帳時間各店不同，兩到三週都算正常。超過一個月還沒進來，先找店家，不是海關。',
+    refundCheckNotYet: '還沒收到',
+    refundCheckAllIn: '都收到了',
+    refundCheckRemindLater: '7 天後再提醒我一次',
+    emptyUnnamedSimKicker: '還沒搞懂規則？',
+    emptyUnnamedSimDesc:
+      '跟著走一趟，看你能退多少。門檻、失效、期限，走完就懂了。',
   },
   ja: {
     appName: 'Kaeru',
@@ -678,8 +720,8 @@ const T = {
     groupHint: '同一店舗・同一日は税抜金額が合算されます',
     filters: {
       all: 'すべて',
+      pending: '情報待ち',
       todo: '未処理',
-      short: '5,000 円未満',
       done: '完了',
     },
     noMatch: '該当するレシートはありません。',
@@ -883,8 +925,8 @@ const T = {
     menuAdd: 'レシートを追加',
     menuCurrent: '現在',
     tripCountUnit: '件の旅程',
-    sim: 'シミュレーション：大阪 4 日間',
-    simSub: '6 つの判断で返金額が変わります',
+    sim: '大阪を試し歩き',
+    simSub: '歩いてみれば、いくら返ってくるかわかります',
     startSim: '旅を始める',
     simStep: '判断',
     simGot: '返金額',
@@ -949,6 +991,50 @@ const T = {
     clearAll: 'すべてのデータを削除',
     clearConfirm: '本当に削除しますか？元に戻せません。',
     source: '出典：観光庁 消費税免税店サイト',
+
+    // ---- 2b 體驗調整 ----
+    todayActionTitle: '今日やること',
+    todayActionLine: (n) => `残り ${n} 件`,
+    todayActionDone: 'すべて完了',
+    goCheck: '確認へ',
+    deadlineBannerTitle: (n, days) => `レシート ${n} 件が ${days} 日後に期限切れ`,
+    deadlineBannerDetail: (amount, shop) => `¥${amount} が戻らなくなります · ${shop}`,
+    expiredBadge: '期限切れ',
+    filterPendingBanner: (n) => `${n} 件の情報待ち`,
+    filterPendingBannerDesc:
+      '情報待ちのレシートは返金見込み額に含まれません。時間があるときに店舗名と購入日を入力してください。',
+    pendingShopPlaceholder: '店舗名 未入力',
+    pendingCapturedOn: (date) => `${date} 撮影`,
+    pendingBadge: '情報待ち',
+    pendingFillLink: '店舗名と購入日を入力',
+    quickAddTitle: '撮影完了',
+    quickAddSave: '保存',
+    quickAddGotAmount: '金額を読み取りました',
+    quickAddReadIncl: '写真から読み取った税込金額',
+    quickAddRateLine: (rate, net, tax) => `税率 ${rate}% · 税抜 ¥${net} · 消費税額 ¥${tax}`,
+    refundQ: 'このレシート、お店で返金方法を登録しましたか？',
+    refundOptRegistered: '登録した',
+    refundOptNo: 'していない',
+    refundOptUnsure: 'わからない',
+    refundHint:
+      '一番忘れやすいステップです。登録していないと、返金は自動的には行われません。',
+    pendingFieldsLabel: '店舗名と購入日',
+    pendingFieldsDesc: '写真から読み取れませんでした。後で入力してください',
+    quickSaveCta: '保存して後で入力',
+    quickFullFormCta: '今すぐ全部入力する',
+    refundCheckTitle: '返金は届きましたか',
+    refundCheckSubtitle: (tripName, days) => `${tripName} · 帰国後 ${days} 日`,
+    refundCheckDesc: (n) =>
+      `今回、確認済みのレシートが ${n} 件あります。入金済みのものにチェックを入れてください。`,
+    refundCheckWaiting: '未入金',
+    refundCheckInfo:
+      '返金は免税店または委託された返金事業者が処理します。入金時期は店舗により異なり、2〜3 週間は正常です。1 か月を過ぎても届かない場合は、税関ではなく店舗にご確認ください。',
+    refundCheckNotYet: 'まだ届いていない',
+    refundCheckAllIn: 'すべて届いた',
+    refundCheckRemindLater: '7 日後にもう一度知らせる',
+    emptyUnnamedSimKicker: 'ルールがまだよくわからない？',
+    emptyUnnamedSimDesc:
+      '歩いてみれば、いくら返ってくるかわかります。下限・無効・期限、歩き終わればわかります。',
   },
 };
 
@@ -1524,6 +1610,25 @@ function daysLeft(dateStr) {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
   return Math.round((d - now) / 86400000);
+}
+
+// 快速新增（先拍照晚點補）存下來、OCR 沒讀到店名的收據——用「店名是
+// 空的」這個天然、不用額外欄位的訊號判斷，一旦使用者補上店名，這張
+// 就自動不再是待補狀態，不用另外清一個旗標。完整表單本來就規定店名
+// 是必填，正常流程永遠不會存出一張空店名的收據，所以這個判斷不會
+// 誤判到既有資料。
+function isPendingInfo(it) {
+  return !it.shop || !it.shop.trim();
+}
+
+// 已經超過 90 天期限、還沒真的退到錢、也不是已在境內消費（那個是另一
+// 種「死掉」，有自己的樣式跟文案）的收據——跟「已在境內消費」用同一套
+// 對待方式：不刪除、不隱藏，但不再算進「還沒處理」或「預估可退稅額」，
+// 因為那筆錢已經拿不回來了，算進去只會讓使用者以為還有機會。
+function isExpiredUnclaimed(it) {
+  if (it.status === 'refunded' || it.consumed) return false;
+  const d = daysLeft(it.date);
+  return d !== null && d < 0;
 }
 
 // 首頁倒數（幾天幾小時）本身沒有 setInterval，dDays/dHours 只有在畫面
@@ -2197,6 +2302,9 @@ export default function App() {
   const [tripSheet, setTripSheet] = useState(false);
   const [editingTripId, setEditingTripId] = useState(null);
   const [endedSheetOpen, setEndedSheetOpen] = useState(false);
+  const [deadline3dSheetOpen, setDeadline3dSheetOpen] = useState(false);
+  const [refundCheckOpen, setRefundCheckOpen] = useState(false);
+  const [quickAddOn, setQuickAddOn] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [tab, setTab] = useState('home');
   const [editing, setEditing] = useState(null);
@@ -2216,6 +2324,9 @@ export default function App() {
   useBackClose(tab !== 'home', () => setTab('home'));
   useBackClose(tripSheet, () => setTripSheet(false));
   useBackClose(endedSheetOpen, () => setEndedSheetOpen(false));
+  useBackClose(deadline3dSheetOpen, () => setDeadline3dSheetOpen(false));
+  useBackClose(refundCheckOpen, () => setRefundCheckOpen(false));
+  useBackClose(quickAddOn, () => setQuickAddOn(false));
   useBackClose(menuOpen, () => setMenuOpen(false));
   useBackClose(!!openId, () => setOpenId(null));
   useBackClose(quizOn, () => setQuizOn(false));
@@ -2405,11 +2516,22 @@ export default function App() {
       refundable = 0,
       refundedTax = 0,
       pendingCount = 0,
-      minDays = null;
+      minDays = null,
+      todoCount = 0,
+      todoTax = 0;
+    // ≤14 天到期警示：收集所有還沒失效、還沒退款、資料齊全的候選，最後
+    // 挑最快到期的那張出來當代表（金額、店名），數量給的是整批的張數。
+    const deadlineSoonList = [];
     for (const it of tripItems) {
       totalIncl += it.incl || 0;
       const g = groups.get(groupKey(it));
-      const eligible = g && g.ok && !it.consumed;
+      // 資料待補（快速新增、OCR 沒讀到店名）跟已過期未退的收據，都不
+      // 算進任何「還可以退/還沒處理」的主動追蹤範圍——前者金額可能是
+      // OCR 誤讀，不能拿去算承諾；後者已經拿不回來了，算進去只會讓
+      // 使用者以為還有機會。兩者都不刪除、不隱藏，只是不進這裡的加總。
+      const pendingInfo = isPendingInfo(it);
+      const expired = isExpiredUnclaimed(it);
+      const eligible = g && g.ok && !it.consumed && !pendingInfo && !expired;
       if (eligible && it.status !== 'refunded') refundable += taxOf(it);
       // #10 修正：原本只算 status==='refunded'——「已查驗」（在機場查驗
       // 過、只是還沒手動標成「已退款」）的金額既不算進 refundable 之後
@@ -2421,13 +2543,39 @@ export default function App() {
       // 已在境內吃掉/用掉的收據退不了稅，不算「還沒處理」，跟
       // tripStatsFor 的 pending 判斷一致，不然首頁「還沒處理」的張數
       // 跟最近到期倒數，會把已經失效、退不了稅的收據也算進去。
-      if (it.status !== 'refunded' && !it.consumed) {
+      if (it.status !== 'refunded' && !it.consumed && !pendingInfo && !expired) {
         pendingCount++;
         const d = daysLeft(it.date);
         if (d !== null && (minDays === null || d < minDays)) minDays = d;
+        if (d !== null && d >= 0 && d <= 14) deadlineSoonList.push({ it, d });
+      }
+      // 回程當天行動列（首頁）用的「今天要辦的事」，跟查驗頁的 todo
+      // 是同一份定義：已達標、沒消費、沒過期、資料補齊，但還沒在機場
+      // 查驗過的收據。
+      if (eligible && (it.status === 'purchased' || it.status === 'registered')) {
+        todoCount++;
+        todoTax += taxOf(it);
       }
     }
-    return { totalIncl, refundable, refundedTax, pendingCount, minDays };
+    deadlineSoonList.sort((a, b) => a.d - b.d);
+    const deadlineSoon = deadlineSoonList.length
+      ? {
+          count: deadlineSoonList.length,
+          days: deadlineSoonList[0].d,
+          amount: taxOf(deadlineSoonList[0].it),
+          shop: deadlineSoonList[0].it.shop,
+        }
+      : null;
+    return {
+      totalIncl,
+      refundable,
+      refundedTax,
+      pendingCount,
+      minDays,
+      todoCount,
+      todoTax,
+      deadlineSoon,
+    };
   }, [tripItems, groups]);
 
   // 保守偵測「這趟結束了」：回程時間超過 24 小時，且這趟的收據全部
@@ -2457,6 +2605,50 @@ export default function App() {
     // 跳不出來。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shouldPromptEnded, activeTrip?.id]);
+
+  // ≤3 天期限警示：只提一次，不是每天都跳。這個 app 目前沒有真的 OS
+  // 推播（沒有裝 local-notifications 之類的原生套件、也沒有跟使用者
+  // 要通知權限），所以做成「打開 App 時如果符合條件就跳一次」的站內
+  // 提示，跟「這趟結束了」用同一種一次性旗標機制。
+  const shouldPromptDeadline3d =
+    !!activeTrip &&
+    !activeTrip.deadline3dPromptShown &&
+    !!stats.deadlineSoon &&
+    stats.deadlineSoon.days <= 3;
+
+  useEffect(() => {
+    if (!shouldPromptDeadline3d) return;
+    const id = activeTrip.id;
+    setDeadline3dSheetOpen(true);
+    setTrips((prev) =>
+      prev.map((x) => (x.id === id ? { ...x, deadline3dPromptShown: true } : x)),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldPromptDeadline3d, activeTrip?.id]);
+
+  // 退款確認：回程後 7 天問一次「錢進來了嗎」，不要求使用者每天回來記
+  // 帳。跟上面兩個一樣是站內提示（沒有真的推播），但這裡故意可以重複
+  // 出現——使用者可以按「7 天後再提醒我一次」，把下一次提醒時間往後推。
+  const refundCheckEligibleCount = tripItems.filter(
+    (it) =>
+      !it.consumed &&
+      !isPendingInfo(it) &&
+      (it.status === 'verified' || it.status === 'refunded'),
+  ).length;
+  const shouldPromptRefundCheck =
+    !!activeTrip &&
+    !!activeTrip.departure &&
+    !activeTrip.refundCheckDismissed &&
+    refundCheckEligibleCount > 0 &&
+    (activeTrip.refundCheckNextAt
+      ? Date.now() >= new Date(activeTrip.refundCheckNextAt).getTime()
+      : Date.now() - new Date(activeTrip.departure).getTime() >= 7 * 86400000);
+
+  useEffect(() => {
+    if (!shouldPromptRefundCheck) return;
+    setRefundCheckOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldPromptRefundCheck, activeTrip?.id]);
 
   function upsert(input, photosData) {
     const item = { ...input, tripId: input.tripId || activeId };
@@ -2491,6 +2683,40 @@ export default function App() {
     });
     window.storage.delete(photoKey(id)).catch(() => {});
     setOpenId(null);
+  }
+
+  // 「+」統一先走快路（拍照優先）。完整表單還在，只是不再是預設路徑——
+  // 快路裡的「現在就填完整資料」跟編輯既有收據都還是走 setEditing。
+  function startAdd() {
+    setQuickAddOn(true);
+  }
+
+  // 快路「存起來，晚點再補」：跟 EditSheet.save() 走的是同一套狀態機
+  // 推導（有登記才進 registered，否則停在 purchased），只是欄位少很多、
+  // 沒有使用者手動調過的 taxOverride/note/unpacked/consumed。
+  function quickSaveDraft(draft, photosArr) {
+    const id = `r_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    upsert(
+      {
+        id,
+        shop: draft.shop,
+        date: draft.date,
+        incl: draft.incl,
+        rate: draft.rate,
+        incl8: draft.incl8,
+        incl10: draft.incl10,
+        taxOverride: null,
+        refundMethod: draft.refundMethod,
+        unpacked: false,
+        consumed: false,
+        note: '',
+        status: draft.refundMethod === 'registered' ? 'registered' : 'purchased',
+        hasPhoto: !!photosArr.length,
+        tripId: activeId,
+      },
+      photosArr,
+    );
+    setQuickAddOn(false);
   }
 
   async function fetchRate() {
@@ -2617,7 +2843,7 @@ export default function App() {
               )}
               <div className="relative flex items-center gap-0.5">
                 <button
-                  onClick={() => setEditing('new')}
+                  onClick={startAdd}
                   className="rounded-lg p-2"
                   style={{ color: C.ink }}
                   aria-label={t.menuAdd}
@@ -2667,7 +2893,7 @@ export default function App() {
                     }}
                     onAdd={() => {
                       setMenuOpen(false);
-                      deferOpen(() => setEditing('new'));
+                      deferOpen(startAdd);
                     }}
                     onTrips={() => {
                       setMenuOpen(false);
@@ -2694,12 +2920,17 @@ export default function App() {
               settings={settings}
               trip={activeTrip}
               hasItems={tripItems.length > 0}
-              onAdd={() => setEditing('new')}
+              onAdd={startAdd}
               onGoSettings={() => setTab('set')}
+              onGoCheck={() => setTab('check')}
               onEditTrip={() => setEditingTripId(activeId)}
               onGoFaq={() => {
                 setTab('faq');
                 setQuizOn(false);
+              }}
+              onStartSim={() => {
+                setTab('faq');
+                setQuizOn(true);
               }}
             />
           )}
@@ -2712,7 +2943,7 @@ export default function App() {
               taxOf={taxOf}
               settings={settings}
               onOpen={setOpenId}
-              onAdd={() => setEditing('new')}
+              onAdd={startAdd}
             />
           )}
 
@@ -2734,7 +2965,12 @@ export default function App() {
                   prev.map((it) => {
                     if (it.tripId !== activeId) return it;
                     const g = groups.get(groupKey(it));
-                    const eligible = g && g.ok && !it.consumed;
+                    const eligible =
+                      g &&
+                      g.ok &&
+                      !it.consumed &&
+                      !isPendingInfo(it) &&
+                      !isExpiredUnclaimed(it);
                     return eligible &&
                       (it.status === 'purchased' || it.status === 'registered')
                       ? { ...it, status: 'verified' }
@@ -2863,6 +3099,77 @@ export default function App() {
         />
       )}
 
+      {deadline3dSheetOpen && stats.deadlineSoon && (
+        <DeadlineWarnSheet
+          t={t}
+          deadlineSoon={stats.deadlineSoon}
+          onClose={() => setDeadline3dSheetOpen(false)}
+          onGoCheck={() => {
+            setDeadline3dSheetOpen(false);
+            deferOpen(() => setTab('check'));
+          }}
+        />
+      )}
+
+      {refundCheckOpen && activeTrip && (
+        <RefundCheckSheet
+          t={t}
+          trip={activeTrip}
+          items={tripItems.filter(
+            (it) =>
+              !it.consumed &&
+              !isPendingInfo(it) &&
+              (it.status === 'verified' || it.status === 'refunded'),
+          )}
+          taxOf={taxOf}
+          daysSince={Math.floor(
+            (Date.now() - new Date(activeTrip.departure).getTime()) / 86400000,
+          )}
+          onToggleStatus={(id, isRefunded) =>
+            setItems((prev) =>
+              prev.map((p) =>
+                p.id === id
+                  ? { ...p, status: isRefunded ? 'verified' : 'refunded' }
+                  : p,
+              ),
+            )
+          }
+          onClose={() => setRefundCheckOpen(false)}
+          onAllIn={() => {
+            const id = activeTrip.id;
+            setItems((prev) =>
+              prev.map((p) =>
+                p.tripId === id && p.status === 'verified'
+                  ? { ...p, status: 'refunded' }
+                  : p,
+              ),
+            );
+            setTrips((prev) =>
+              prev.map((x) =>
+                x.id === id ? { ...x, refundCheckDismissed: true } : x,
+              ),
+            );
+            setRefundCheckOpen(false);
+          }}
+          onRemindLater={() => {
+            const id = activeTrip.id;
+            setTrips((prev) =>
+              prev.map((x) =>
+                x.id === id
+                  ? {
+                      ...x,
+                      refundCheckNextAt: new Date(
+                        Date.now() + 7 * 86400000,
+                      ).toISOString(),
+                    }
+                  : x,
+              ),
+            );
+            setRefundCheckOpen(false);
+          }}
+        />
+      )}
+
       {editingTripId && (
         <TripEditSheet
           t={t}
@@ -2884,11 +3191,31 @@ export default function App() {
         />
       )}
 
+      {quickAddOn && (
+        <QuickAddFlow
+          t={t}
+          onClose={() => setQuickAddOn(false)}
+          onSaveQuick={quickSaveDraft}
+          onSaveFull={(draft, photosArr) => {
+            setQuickAddOn(false);
+            // 快路存的草稿還沒真的存進 items/photos，用 _photos 這個
+            // 一次性欄位把照片直接帶給 EditSheet 當初始值，跟真正存過
+            // 的收據（有 id、photos[id] 找得到）分開處理，存檔之後
+            // save() 會另外產生一個真的 id，這個草稿物件不會留下來。
+            deferOpen(() => setEditing({ ...draft, _photos: photosArr }));
+          }}
+        />
+      )}
+
       {editing && (
         <EditSheet
           t={t}
           initial={editing === 'new' ? null : editing}
-          photos={editing === 'new' ? [] : photos[editing.id] || []}
+          photos={
+            editing === 'new'
+              ? []
+              : editing._photos || photos[editing.id] || []
+          }
           onClose={() => setEditing(null)}
           onSave={(item, photosData) => {
             upsert(item, photosData);
@@ -2933,8 +3260,10 @@ function HomeView({
   hasItems,
   onAdd,
   onGoSettings,
+  onGoCheck,
   onEditTrip,
   onGoFaq,
+  onStartSim,
 }) {
   useNowTick();
   const dep = trip && trip.departure ? new Date(trip.departure) : null;
@@ -2950,13 +3279,21 @@ function HomeView({
       ? `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
       : '';
   const departed = !!dep && diffMs <= 0;
+  // 回程當天行動列：只在起飛前 24 小時內出現，其他時候完全不存在——
+  // 不要用 disabled 或灰掉的版本佔位，沒到那個時間點就當它不存在。
+  const within24h = !!dep && diffMs !== null && diffMs > 0 && diffMs <= 24 * 3600 * 1000;
 
   // 還沒有任何一張收據：先讓「行程」這個概念被看見，而不是悄悄疊在
   // 匿名行程裡。有沒有名字／回程時間決定看到畫面 38 還是畫面 39。
   if (!hasItems) {
     const unnamed = !trip || !trip.name || !trip.departure;
     return unnamed ? (
-      <EmptyUnnamedTrip t={t} onEditTrip={onEditTrip} onAdd={onAdd} />
+      <EmptyUnnamedTrip
+        t={t}
+        onEditTrip={onEditTrip}
+        onAdd={onAdd}
+        onStartSim={onStartSim}
+      />
     ) : (
       <EmptyNamedTrip
         t={t}
@@ -2980,7 +3317,7 @@ function HomeView({
           departed={departed}
           onGoSettings={onGoSettings}
         />
-        {dep && diffMs > 0 && (
+        {dep && diffMs > 0 && !within24h && (
           <div className="mt-4 flex flex-wrap gap-1.5">
             <Badge tone="blue">
               {t.arriveTagPre}
@@ -2988,6 +3325,67 @@ function HomeView({
               {t.arriveTagSuf}
             </Badge>
             <Badge tone="clay">{t.checkinBadge}</Badge>
+          </div>
+        )}
+
+        {within24h && (
+          <button
+            onClick={onGoCheck}
+            className="mt-4 flex w-full items-center justify-between gap-3 text-left"
+            style={{
+              backgroundColor: stats.todoCount > 0 ? C.blue : C.sage,
+              padding: '15px 16px',
+            }}
+          >
+            <div className="min-w-0">
+              <p
+                className="font-bold"
+                style={{ fontSize: '10px', letterSpacing: '0.2em', color: C.blueSoft }}
+              >
+                {t.todayActionTitle}
+              </p>
+              <p
+                className="mt-1 truncate font-bold"
+                style={{ fontSize: '15px', color: '#FFFFFF' }}
+              >
+                {stats.todoCount > 0
+                  ? t.todayActionLine(stats.todoCount)
+                  : t.todayActionDone}
+              </p>
+              {stats.todoCount > 0 && (
+                <p
+                  className="mt-0.5 tabular-nums"
+                  style={{ fontSize: '11.5px', color: C.blueSoft }}
+                >
+                  ¥{yen(stats.todoTax)}
+                </p>
+              )}
+            </div>
+            {stats.todoCount > 0 && (
+              <span
+                className="shrink-0 font-bold"
+                style={{ fontSize: '12.5px', color: '#FFFFFF' }}
+              >
+                {t.goCheck} ›
+              </span>
+            )}
+          </button>
+        )}
+
+        {stats.deadlineSoon && (
+          <div
+            className="mt-3"
+            style={{ backgroundColor: C.clay, padding: '15px 16px' }}
+          >
+            <p className="font-bold" style={{ fontSize: '13px', color: '#FFFFFF' }}>
+              {t.deadlineBannerTitle(stats.deadlineSoon.count, stats.deadlineSoon.days)}
+            </p>
+            <p className="mt-1" style={{ fontSize: '11.5px', color: '#F3E7DD' }}>
+              {t.deadlineBannerDetail(
+                yen(stats.deadlineSoon.amount),
+                stats.deadlineSoon.shop || t.pendingShopPlaceholder,
+              )}
+            </p>
           </div>
         )}
       </section>
@@ -3115,6 +3513,11 @@ function CountdownDisplay({ t, dep, diffMs, dDays, dHours, departed, onGoSetting
     );
   }
   if (dep && diffMs > 0) {
+    // 回程班機起飛前 24 小時內，天數已經沒有意義（永遠是 0），改顯示
+    // 小時＋分——dHours 傳進來的時候本來就是「扣掉天數後剩下的小時」，
+    // 24 小時內天數必為 0，所以這個值本身已經等於總小時數，不用另外算。
+    const within24h = diffMs <= 24 * 3600 * 1000;
+    const dMinutes = Math.floor((diffMs % 3600000) / 60000);
     return (
       <>
         <p style={{ color: C.sub, fontSize: '10.5px', letterSpacing: '0.24em' }}>
@@ -3125,7 +3528,7 @@ function CountdownDisplay({ t, dep, diffMs, dDays, dHours, departed, onGoSetting
           style={{ letterSpacing: '-0.01em' }}
         >
           <span className="kaeru-bignum font-semibold" style={{ color: C.ink, lineHeight: 1 }}>
-            {dDays}
+            {within24h ? dHours : dDays}
           </span>
           <span
             style={{
@@ -3136,15 +3539,15 @@ function CountdownDisplay({ t, dep, diffMs, dDays, dHours, departed, onGoSetting
               marginRight: '12px',
             }}
           >
-            {t.days}
+            {within24h ? t.hours : t.days}
           </span>
           <span className="kaeru-bignum font-semibold" style={{ color: C.ink, lineHeight: 1 }}>
-            {dHours}
+            {within24h ? dMinutes : dHours}
           </span>
           <span
             style={{ color: C.ink, fontSize: '16px', fontWeight: 500, marginLeft: '4px' }}
           >
-            {t.hours}
+            {within24h ? t.min : t.hours}
           </span>
         </p>
       </>
@@ -3169,7 +3572,7 @@ function CountdownDisplay({ t, dep, diffMs, dDays, dHours, departed, onGoSetting
 // 空狀態．畫面 38：行程還沒命名（沒名字或沒回程時間），而且一張收據
 // 都還沒加。用一張待填卡把「行程」這個概念亮出來，主 CTA 去把名字和
 // 回程時間填上；逃生口讓使用者可以先加收據，晚點再回來補。
-function EmptyUnnamedTrip({ t, onEditTrip, onAdd }) {
+function EmptyUnnamedTrip({ t, onEditTrip, onAdd, onStartSim }) {
   return (
     <div className="pb-6">
       <section className="pt-2">
@@ -3251,24 +3654,27 @@ function EmptyUnnamedTrip({ t, onEditTrip, onAdd }) {
           className="font-bold"
           style={{ color: C.blue, fontSize: '10.5px', letterSpacing: '0.24em' }}
         >
-          {t.emptyUnnamedRulesTitle}
+          {t.emptyUnnamedSimKicker}
         </h3>
-        <ol
-          className="mt-4"
-          style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
+        <button
+          onClick={onStartSim}
+          className="mt-3 block w-full text-left"
+          style={{ backgroundColor: C.soft, padding: '22px', borderRadius: 0 }}
         >
-          {[t.rule1, t.rule2, t.rule3].map((x, n) => (
-            <li key={n} className="flex" style={{ gap: '14px' }}>
-              <span
-                className="shrink-0 font-bold tabular-nums"
-                style={{ color: C.blue, fontSize: '11px' }}
-              >
-                {String(n + 1).padStart(2, '0')}
-              </span>
-              <span style={{ fontSize: '13px', lineHeight: 1.75 }}>{x}</span>
-            </li>
-          ))}
-        </ol>
+          <p className="font-bold" style={{ fontSize: '18px', lineHeight: 1.4 }}>
+            {t.sim}
+          </p>
+          <p className="mt-2" style={{ color: C.sub, fontSize: '12.5px', lineHeight: 1.8 }}>
+            {t.emptyUnnamedSimDesc}
+          </p>
+          <span
+            className="mt-4 inline-flex items-center gap-1 font-semibold"
+            style={{ color: C.blueDeep, fontSize: '13px' }}
+          >
+            {t.startSim}
+            <ChevronRight size={15} />
+          </span>
+        </button>
       </section>
     </div>
   );
@@ -3488,6 +3894,185 @@ function TripEndedSheet({
   );
 }
 
+// ≤3 天期限警示：一次性站內提示（這個 app 沒有裝真的推播套件，用「打開
+// App 時符合條件就跳一次」代替，跟「這趟結束了」同一種機制）。
+function DeadlineWarnSheet({ t, deadlineSoon, onClose, onGoCheck }) {
+  return (
+    <BottomSheet onClose={onClose}>
+      <div className="flex items-start justify-between gap-3">
+        <h2
+          className="font-bold"
+          style={{ fontSize: '18px', lineHeight: 1.5, color: C.ink }}
+        >
+          {t.deadlineBannerTitle(deadlineSoon.count, deadlineSoon.days)}
+        </h2>
+        <button onClick={onClose} style={{ color: C.sub }}>
+          <X size={15} />
+        </button>
+      </div>
+      <p className="mt-2" style={{ fontSize: '12.5px', lineHeight: 1.9, color: C.clayInk }}>
+        {t.deadlineBannerDetail(
+          yen(deadlineSoon.amount),
+          deadlineSoon.shop || t.pendingShopPlaceholder,
+        )}
+      </p>
+      <button
+        onClick={onGoCheck}
+        className="mt-5 w-full py-3.5 font-bold"
+        style={{ backgroundColor: C.blue, color: '#FFFFFF', fontSize: '13.5px' }}
+      >
+        {t.goCheck}
+      </button>
+    </BottomSheet>
+  );
+}
+
+// 退款確認：回程後 7 天問一次「錢進來了嗎」。不要求使用者每天回來記——
+// 逐張勾選「已經進帳」的，「都收到了」關掉這個提示以後不會再跳；
+// 「還沒收到」把下一次提醒時間往後推 7 天，不會每天煩使用者，但也
+// 不會像「這趟結束了」那樣永遠只問一次。
+// 勾選框直接對應收據的「已退款」狀態（verified ↔ refunded），不是另外
+// 弄一個跟收據本身脫鉤的核取清單——這裡打勾，就是在說「這張真的退到
+// 錢了」，跟收據詳情頁按「已退款」是同一件事，沒有理由分兩份資料。
+function RefundCheckSheet({
+  t,
+  trip,
+  items,
+  taxOf,
+  onToggleStatus,
+  onClose,
+  onAllIn,
+  onRemindLater,
+  daysSince,
+}) {
+  const waiting = items
+    .filter((it) => it.status !== 'refunded')
+    .reduce((s, it) => s + taxOf(it), 0);
+  return (
+    <>
+      <FullScreenSheet>
+        <div
+          className="sticky top-0 z-10 flex items-center justify-between kaeru-pad"
+          style={{
+            backgroundColor: C.page,
+            borderBottom: `1px solid ${C.ink}`,
+            paddingTop: 'max(16px, env(safe-area-inset-top))',
+            paddingBottom: '16px',
+          }}
+        >
+          <button onClick={onClose} style={{ fontSize: '13px', color: C.blueDeep }}>
+            ‹ {t.back}
+          </button>
+          <h2 className="font-bold" style={{ fontSize: '15px' }}>
+            {t.refundCheckTitle}
+          </h2>
+          <button
+            onClick={onClose}
+            className="font-bold"
+            style={{ fontSize: '13px', color: C.blueDeep }}
+          >
+            {t.checkDone}
+          </button>
+        </div>
+
+        <div className="kaeru-pad py-6">
+          <p style={{ color: C.sub, fontSize: '11px', letterSpacing: '0.1em' }}>
+            {t.refundCheckSubtitle(trip.name || t.tripUnnamed, daysSince)}
+          </p>
+          <p className="mt-2" style={{ fontSize: '14px', lineHeight: 1.95 }}>
+            {t.refundCheckDesc(items.length)}
+          </p>
+
+          <div
+            className="mt-4 flex items-baseline justify-between"
+            style={{ borderTop: `1px solid ${C.ink}`, paddingTop: '14px' }}
+          >
+            <span style={{ fontSize: '12.5px', color: C.sub }}>
+              {t.refundCheckWaiting}
+            </span>
+            <span
+              className="font-semibold tabular-nums"
+              style={{ fontSize: '26px', color: C.blueDeep }}
+            >
+              ¥{yen(waiting)}
+            </span>
+          </div>
+
+          <div className="mt-2">
+            {items.map((it, i) => {
+              const checked = it.status === 'refunded';
+              return (
+                <button
+                  key={it.id}
+                  onClick={() => onToggleStatus(it.id, checked)}
+                  className="flex w-full items-center justify-between gap-3 py-3.5 text-left"
+                  style={{ borderTop: `1px solid ${i === 0 ? C.ink : C.line}` }}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate font-bold" style={{ fontSize: '14.5px' }}>
+                      {it.shop}
+                    </span>
+                    <span
+                      className="mt-0.5 block tabular-nums"
+                      style={{ color: C.sub, fontSize: '11px' }}
+                    >
+                      {it.date} · {t.taxAmount} ¥{yen(taxOf(it))}
+                    </span>
+                  </span>
+                  <span
+                    className="flex shrink-0 items-center justify-center"
+                    style={{
+                      width: '22px',
+                      height: '22px',
+                      backgroundColor: checked ? C.sage : 'transparent',
+                      border: checked ? 'none' : `1px solid ${C.line}`,
+                    }}
+                  >
+                    {checked && (
+                      <CheckCircle2 size={14} style={{ color: '#FFFFFF' }} />
+                    )}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-4" style={{ backgroundColor: C.soft, padding: '14px' }}>
+            <p style={{ color: C.sub, fontSize: '11.5px', lineHeight: 1.8 }}>
+              {t.refundCheckInfo}
+            </p>
+          </div>
+
+          <div className="mt-5 flex gap-2">
+            <button
+              onClick={onRemindLater}
+              className="flex-1 py-3 text-sm"
+              style={{ border: `1px solid ${C.line}`, color: C.sub }}
+            >
+              {t.refundCheckNotYet}
+            </button>
+            <button
+              onClick={onAllIn}
+              className="py-3 text-sm font-bold"
+              style={{ flex: 1.4, backgroundColor: C.blue, color: '#FFFFFF' }}
+            >
+              {t.refundCheckAllIn}
+            </button>
+          </div>
+
+          <button
+            onClick={onRemindLater}
+            className="mt-3 w-full text-center"
+            style={{ fontSize: '11px', color: C.sub }}
+          >
+            {t.refundCheckRemindLater}
+          </button>
+        </div>
+      </FullScreenSheet>
+    </>
+  );
+}
+
 function Row({ label, sub, last, align = 'center', children }) {
   return (
     <div
@@ -3545,18 +4130,35 @@ function ListView({ t, items, groups, taxOf, settings, onOpen, onAdd }) {
     );
   }
 
+  // 資料待補（快速新增、店名還沒補上）的收據不進一般的「同店同日」分組——
+  // 店名是空的，硬分組只會把不相干的待補收據濫在一起。這裡拆出來，
+  // 每一張獨立顯示，「待補」篩選只看得到它們，「全部」則排在最前面。
+  const pendingItems = items
+    .filter(isPendingInfo)
+    .sort((a, b) => b.date.localeCompare(a.date));
+
   const match = (it) => {
-    const g = groups.get(groupKey(it));
     if (filter === 'all') return true;
-    if (filter === 'short') return !(g && g.ok);
     if (filter === 'done') return it.status === 'refunded';
     if (filter === 'todo') return it.status !== 'refunded' && !it.consumed;
     return true;
   };
 
-  const keys = Array.from(groups.keys())
-    .filter((k) => groups.get(k).arr.some(match))
-    .sort((a, b) => b.split('||')[1].localeCompare(a.split('||')[1]));
+  const showPendingSection =
+    (filter === 'all' || filter === 'pending') && pendingItems.length > 0;
+  const showGroupedSection = filter !== 'pending';
+
+  const keys = showGroupedSection
+    ? Array.from(groups.keys())
+        .filter((k) => !groups.get(k).arr.every(isPendingInfo))
+        .filter((k) =>
+          groups.get(k).arr.some((it) => !isPendingInfo(it) && match(it)),
+        )
+        .sort((a, b) => b.split('||')[1].localeCompare(a.split('||')[1]))
+    : [];
+
+  const nothingToShow =
+    filter === 'pending' ? !pendingItems.length : !keys.length && !showPendingSection;
 
   return (
     <div className="space-y-4">
@@ -3564,7 +4166,7 @@ function ListView({ t, items, groups, taxOf, settings, onOpen, onAdd }) {
         className="flex"
         style={{ gap: '16px', borderBottom: `1px solid ${C.line}` }}
       >
-        {['all', 'todo', 'short', 'done'].map((f) => (
+        {['all', 'pending', 'todo', 'done'].map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -3583,7 +4185,21 @@ function ListView({ t, items, groups, taxOf, settings, onOpen, onAdd }) {
         ))}
       </div>
 
-      {!keys.length && (
+      {showPendingSection && (
+        <div style={{ backgroundColor: C.soft, padding: '14px 16px' }}>
+          <p style={{ fontSize: '13px', fontWeight: 700, color: C.ink }}>
+            {t.filterPendingBanner(pendingItems.length)}
+          </p>
+          <p
+            className="mt-1"
+            style={{ fontSize: '11.5px', color: C.sub, lineHeight: 1.7 }}
+          >
+            {t.filterPendingBannerDesc}
+          </p>
+        </div>
+      )}
+
+      {nothingToShow && (
         <p
           className="rounded-xl p-6 text-center text-sm"
           style={{
@@ -3596,81 +4212,182 @@ function ListView({ t, items, groups, taxOf, settings, onOpen, onAdd }) {
         </p>
       )}
 
-      <div className="kaeru-group-gap">
-        {keys.map((k) => {
-          const g = groups.get(k);
-          const [shop, date] = k.split('||');
-          return (
-            <section key={k}>
-              <div
-                className="flex items-end justify-between gap-3 pb-2"
-                style={{ borderBottom: `1px solid ${g.ok ? C.ink : C.clay}` }}
-              >
-                <div className="min-w-0">
-                  <h3
-                    className="truncate font-bold"
-                    style={{ fontSize: '13.5px' }}
-                  >
-                    {shop || '—'}
-                  </h3>
-                  <p
-                    className="tabular-nums"
-                    style={{ color: C.sub, fontSize: '11px' }}
-                  >
-                    {date} · {g.arr.length} {t.itemsUnit}
-                  </p>
+      {showPendingSection && (
+        <div className="kaeru-group-gap">
+          {pendingItems.map((it) => (
+            <PendingReceiptCard
+              key={it.id}
+              it={it}
+              t={t}
+              taxOf={taxOf}
+              onClick={() => onOpen(it.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {showGroupedSection && (
+        <div className="kaeru-group-gap">
+          {keys.map((k) => {
+            const g = groups.get(k);
+            const [shop, date] = k.split('||');
+            // 同一組所有收據共用同一個日期——過期不過期整組會一起翻，直接
+            // 拿這個日期算一次就好。已在境內消費的不算「錯過」，那個有
+            // 自己的一整套失效樣式。
+            const groupDays = daysLeft(date);
+            const groupExpired =
+              !g.arr.every((it) => it.consumed) &&
+              groupDays !== null &&
+              groupDays < 0;
+            return (
+              <section key={k}>
+                <div
+                  className="flex items-end justify-between gap-3 pb-2"
+                  style={{
+                    borderBottom: `1px solid ${g.ok && !groupExpired ? C.ink : C.clay}`,
+                  }}
+                >
+                  <div className="min-w-0">
+                    <h3
+                      className="truncate font-bold"
+                      style={{ fontSize: '13.5px' }}
+                    >
+                      {shop || '—'}
+                    </h3>
+                    <p
+                      className="tabular-nums"
+                      style={{ color: C.sub, fontSize: '11px' }}
+                    >
+                      {date} · {g.arr.length} {t.itemsUnit}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p
+                      className="tabular-nums"
+                      style={{ color: C.sub, fontSize: '11px' }}
+                    >
+                      {t.netTotal} ¥{yen(g.net)}
+                    </p>
+                    <span className="mt-1 inline-block">
+                      {groupExpired ? (
+                        <Badge tone="clay">{t.expiredBadge}</Badge>
+                      ) : g.ok ? (
+                        <Badge tone="sage">{t.reached}</Badge>
+                      ) : (
+                        <Badge tone="clay">
+                          {t.short} ¥{yen(5000 - g.net)}
+                        </Badge>
+                      )}
+                    </span>
+                  </div>
                 </div>
-                <div className="shrink-0 text-right">
-                  <p
-                    className="tabular-nums"
-                    style={{ color: C.sub, fontSize: '11px' }}
-                  >
-                    {t.netTotal} ¥{yen(g.net)}
-                  </p>
-                  <span className="mt-1 inline-block">
-                    {g.ok ? (
-                      <Badge tone="sage">{t.reached}</Badge>
-                    ) : (
-                      <Badge tone="clay">
-                        {t.short} ¥{yen(5000 - g.net)}
-                      </Badge>
-                    )}
-                  </span>
+                <div style={{ border: `1px solid ${C.line}` }}>
+                  {g.arr
+                    .filter((it) => !isPendingInfo(it) && match(it))
+                    .map((it, i) => (
+                      <ReceiptCard
+                        key={it.id}
+                        it={it}
+                        t={t}
+                        taxOf={taxOf}
+                        settings={settings}
+                        groupOk={g.ok}
+                        separator={i > 0}
+                        onClick={() => onOpen(it.id)}
+                      />
+                    ))}
                 </div>
-              </div>
-              <div style={{ border: `1px solid ${C.line}` }}>
-                {g.arr.filter(match).map((it, i) => (
-                  <ReceiptCard
-                    key={it.id}
-                    it={it}
-                    t={t}
-                    taxOf={taxOf}
-                    settings={settings}
-                    groupOk={g.ok}
-                    separator={i > 0}
-                    onClick={() => onOpen(it.id)}
-                  />
-                ))}
-              </div>
-            </section>
-          );
-        })}
-      </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
     </div>
+  );
+}
+
+// 資料待補（快速新增、OCR 沒讀到店名）的收據卡——虛線框代表「資料還沒
+// 補齊」，跟空狀態的待填容器同一個語意。店名位置改顯示「店名待補」，
+// 日期位置改顯示拍照當天，點進去（補上店名和日期 ›）會開完整表單。
+function PendingReceiptCard({ it, t, taxOf, onClick }) {
+  const tax = taxOf(it);
+  const fmtShort = (iso) => {
+    const dt = new Date(iso + 'T00:00:00');
+    return `${dt.getMonth() + 1}/${dt.getDate()}`;
+  };
+  return (
+    <section>
+      <div className="flex items-end justify-between gap-3 pb-2">
+        <div className="min-w-0">
+          <h3
+            className="truncate font-bold"
+            style={{ fontSize: '13.5px', color: C.sub }}
+          >
+            {t.pendingShopPlaceholder}
+          </h3>
+          <p style={{ color: C.sub, fontSize: '11px' }}>
+            {t.pendingCapturedOn(fmtShort(it.date))}
+          </p>
+        </div>
+        <Badge tone="outline">{t.pendingBadge}</Badge>
+      </div>
+      <button
+        onClick={onClick}
+        className="block w-full px-3.5 py-3.5 text-left"
+        style={{ border: `1px dashed ${C.line}` }}
+      >
+        <div className="flex items-baseline justify-between gap-3">
+          <p
+            className="font-semibold tabular-nums"
+            style={{ fontSize: '18px', color: C.ink }}
+          >
+            ¥{yen(it.incl)}
+          </p>
+          <p className="tabular-nums" style={{ color: C.sub, fontSize: '11px' }}>
+            {t.taxAmount} ¥{yen(tax)}
+          </p>
+        </div>
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {netOfItem(it) >= 5000 ? (
+            <Badge tone="sage">{t.reached}</Badge>
+          ) : (
+            <Badge tone="clay">
+              {t.short} ¥{yen(5000 - netOfItem(it))}
+            </Badge>
+          )}
+          {it.refundMethod === 'registered' && (
+            <Badge tone="outline">{t.refundReg}</Badge>
+          )}
+        </div>
+        <p
+          className="mt-2.5 font-semibold"
+          style={{ color: C.blueDeep, fontSize: '12px' }}
+        >
+          {t.pendingFillLink} ›
+        </p>
+      </button>
+    </section>
   );
 }
 
 function ReceiptCard({ it, t, taxOf, settings, groupOk, separator, onClick }) {
   const d = daysLeft(it.date);
   const tax = taxOf(it);
-  const dead = !!it.consumed;
+  const consumedDead = !!it.consumed;
+  // 已超過 90 天期限、還沒真的退到錢的收據，跟「已在境內消費」共用同一套
+  // 失效樣式（卡底色、金額劃線）——但這是「來不及」不是「用掉了」，徽章
+  // 跟說明文字要分開寫，進度軌跡也保留原本走到哪一步，不像消費那樣整個
+  // 收縮成卡在第一步。
+  const expiredDead =
+    !consumedDead && it.status !== 'refunded' && d !== null && d < 0;
+  const dead = consumedDead || expiredDead;
   const warn = !dead && !groupOk;
   const stageIdx = STAGES.indexOf(it.status);
   const deadlineText =
     d === null ? null : d < 0 ? t.expired : `${t.warnDeadline} ${d} ${t.days}`;
   const showDeadlineBadge = !dead && d !== null && d <= 30;
   const showPendingBadge = !dead && !warn && stageIdx < 2;
-  const tone = warn ? C.clay : C.blue;
+  const tone = warn ? C.clay : expiredDead ? C.sub : C.blue;
 
   return (
     <Ticket
@@ -3696,14 +4413,16 @@ function ReceiptCard({ it, t, taxOf, settings, groupOk, separator, onClick }) {
         </p>
       </div>
 
-      {/* 四段進度：7×7px 方點，中間連線撐滿。已消費時第一點填色、其餘變空心 */}
+      {/* 四段進度：7×7px 方點，中間連線撐滿。在境內消費時第一點填色、其餘
+          變空心（整張收據作廢，走到哪一步不重要）；過期未退保留真正走到
+          哪一步，只是用比較淡的顏色，表示這個進度已經沒有意義了。 */}
       <div className="mt-2.5 flex items-center">
         {STAGES.map((sname, n) => (
           <div key={sname} className="flex flex-1 items-center last:flex-none">
             <div
               className="shrink-0"
               style={
-                dead
+                consumedDead
                   ? n === 0
                     ? { width: '7px', height: '7px', backgroundColor: C.clay }
                     : {
@@ -3725,7 +4444,7 @@ function ReceiptCard({ it, t, taxOf, settings, groupOk, separator, onClick }) {
                   height: '1px',
                   flex: 1,
                   backgroundColor:
-                    !dead && n < stageIdx ? tone : C.line,
+                    !consumedDead && n < stageIdx ? tone : C.line,
                 }}
               />
             )}
@@ -3733,7 +4452,7 @@ function ReceiptCard({ it, t, taxOf, settings, groupOk, separator, onClick }) {
         ))}
       </div>
 
-      {dead ? (
+      {consumedDead ? (
         <p
           className="mt-1.5"
           style={{ color: C.clayInk, fontSize: '9.5px', fontWeight: 600 }}
@@ -3747,9 +4466,13 @@ function ReceiptCard({ it, t, taxOf, settings, groupOk, separator, onClick }) {
               <span
                 key={sname}
                 className="font-semibold"
-                style={{ color: warn ? C.clayInk : C.blueDeep }}
+                style={{ color: expiredDead ? C.clayInk : warn ? C.clayInk : C.blueDeep }}
               >
-                {warn ? `${t.stuckAt}${t.stageShort[sname]}` : t.stageShort[sname]}
+                {expiredDead
+                  ? t.stageShort[sname]
+                  : warn
+                    ? `${t.stuckAt}${t.stageShort[sname]}`
+                    : t.stageShort[sname]}
               </span>
             ) : (
               <span key={sname} style={{ color: C.sub }}>
@@ -3761,35 +4484,50 @@ function ReceiptCard({ it, t, taxOf, settings, groupOk, separator, onClick }) {
       )}
 
       <div className="mt-2.5 flex flex-wrap gap-1.5">
-        {dead ? (
+        {consumedDead ? (
           <>
             <Badge tone="clay">{t.consumedShort}</Badge>
             <Badge tone="clay">{t.dead}</Badge>
             {it.unpacked && <Badge tone="outline">{t.unpackedShort}</Badge>}
           </>
-        ) : warn ? (
-          <>
-            <Badge tone="clay">{t.notReached}</Badge>
-            <Badge tone="outline">{t.refillTip}</Badge>
-          </>
+        ) : expiredDead ? (
+          <Badge tone="clay">{t.expiredBadge}</Badge>
         ) : (
           <>
-            {showPendingBadge && <Badge tone="blue">{t.pendingCheck}</Badge>}
-            {it.unpacked && <Badge tone="outline">{t.unpackedShort}</Badge>}
-            {showDeadlineBadge && (
-              <Badge tone={d <= 14 ? 'clay' : 'outline'}>{deadlineText}</Badge>
+            {warn ? (
+              <>
+                <Badge tone="clay">{t.notReached}</Badge>
+                <Badge tone="outline">{t.refillTip}</Badge>
+              </>
+            ) : (
+              <>
+                {showPendingBadge && <Badge tone="blue">{t.pendingCheck}</Badge>}
+                {showDeadlineBadge && <Badge tone="clay">{deadlineText}</Badge>}
+                {netOfItem(it) >= 1000000 && <Badge tone="blue">100万円+</Badge>}
+              </>
             )}
-            {netOfItem(it) >= 1000000 && <Badge tone="blue">100万円+</Badge>}
+            {it.unpacked && <Badge tone="outline">{t.unpackedShort}</Badge>}
+            {it.refundMethod === 'registered' && (
+              <Badge tone="outline">{t.refundReg}</Badge>
+            )}
           </>
         )}
       </div>
 
-      {dead && (
+      {consumedDead && (
         <p
           className="mt-2.5"
           style={{ color: C.clayInk, fontSize: '11.5px', lineHeight: 1.8 }}
         >
           {t.deadCardNote}
+        </p>
+      )}
+      {expiredDead && (
+        <p
+          className="mt-2.5"
+          style={{ color: C.clayInk, fontSize: '11px' }}
+        >
+          {t.expired}
         </p>
       )}
     </Ticket>
@@ -3799,7 +4537,16 @@ function ReceiptCard({ it, t, taxOf, settings, groupOk, separator, onClick }) {
 function CheckView({ t, items, groups, taxOf, onVerifyAll, onVerifyOne }) {
   const eligible = items.filter((it) => {
     const g = groups.get(groupKey(it));
-    return g && g.ok && !it.consumed;
+    // 資料待補（店名還沒補上）跟已超過 90 天沒退到的收據，不進查驗
+    // 清單——待補的連店名都打不出來，沒辦法在機場核對；已過期的已經
+    // 不用查驗了。
+    return (
+      g &&
+      g.ok &&
+      !it.consumed &&
+      !isPendingInfo(it) &&
+      !isExpiredUnclaimed(it)
+    );
   });
   const todo = eligible
     .filter((it) => it.status === 'purchased' || it.status === 'registered')
@@ -4175,7 +4922,7 @@ function Scenario({ t, lang, onExit }) {
           className="font-semibold tabular-nums"
           style={{ color: C.ink, fontSize: '13px' }}
         >
-          {t.simStep} {stepCount}
+          {stepCount}
           {t.of}
           {SIM.steps.length}
         </span>
@@ -5824,6 +6571,242 @@ function PhotoCaptureSheets({ t, cap }) {
   );
 }
 
+// 「+」的快路：拍照→OCR→存起來，晚點再補，跟完整表單並行存在，不取代
+// 它。內部重用跟 EditSheet／DetailSheet 同一份 usePhotoCapture／
+// PhotoCaptureSheets 拍照/選相簿/掃描/裁切/OCR 邏輯，外面包一個完全不同
+// 的迷你表單——沒有店名/日期輸入框，也不能選稅率，OCR 讀到什麼就是
+// 什麼，讀不到就掛「待補」標籤。
+function QuickAddFlow({ t, onClose, onSaveQuick, onSaveFull }) {
+  const [imgs, setImgs] = useState([]);
+  const [parsed, setParsed] = useState(null);
+  const [refundMethod, setRefundMethod] = useState(null); // 必答，故意不預選
+  const openedRef = useRef(false);
+  const cap = usePhotoCapture({ imgs, setImgs, onParsed: setParsed });
+  // 這裡不用另外掛一層 useBackClose——整個快路（從開始到存檔／取消）
+  // 在使用者心裡是同一個任務，外層 App 已經用 quickAddOn 掛了一層；
+  // 裡面的來源選單／裁切畫面各自用 usePhotoCapture／PhotoConfirmSheet
+  // 自己的 back-close，不用再包一層，否則同一個任務會被分成兩層，
+  // 使用者要按兩次返回鍵才能真的離開。
+
+  // 一進來就直接跳「拍照/選相簿/掃描」選單，不用使用者再多按一次——
+  // 快路的整個意義就是「拍照優先」。使用者如果把這個選單整個關掉、
+  // 也沒有進到裁切畫面，代表根本不想拍，直接退出整條快路。
+  useEffect(() => {
+    if (!openedRef.current) {
+      openedRef.current = true;
+      cap.setPhotoPromptOpen(true);
+      return;
+    }
+    // 相機/相簿權限被拒時要讓使用者看得到原因、有機會去設定開啟，
+    // 不能默默把整條快路關掉——那樣使用者永遠不知道發生了什麼事。
+    if (
+      !imgs.length &&
+      !cap.photoPromptOpen &&
+      !cap.confirmPhoto &&
+      !cap.photoDenied
+    ) {
+      onClose();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cap.photoPromptOpen, cap.confirmPhoto, cap.photoDenied, imgs.length]);
+
+  if (!imgs.length) {
+    return (
+      <>
+        <PhotoCaptureSheets t={t} cap={cap} />
+        {cap.photoDenied && !cap.photoPromptOpen && !cap.confirmPhoto && (
+          <BottomSheet onClose={onClose}>
+            <p style={{ fontSize: '13px', color: C.ink, lineHeight: 1.9 }}>
+              {cap.photoDenied === 'camera' ? t.cameraDenied : t.photoDenied}
+              {'　'}
+              <button
+                onClick={() => ReceiptScanner.openAppSettings().catch(() => {})}
+                style={{ color: C.blueDeep, textDecoration: 'underline' }}
+              >
+                {t.openSettings}
+              </button>
+            </p>
+          </BottomSheet>
+        )}
+      </>
+    );
+  }
+
+  const mixed = parsed?.rate === 'mixed';
+  const v8 = mixed ? parsed.incl8 || 0 : 0;
+  const v10 = mixed ? parsed.incl10 || 0 : 0;
+  const rate = mixed ? 'mixed' : parsed?.rate ?? 10;
+  const incl = mixed ? v8 + v10 : parsed?.incl || 0;
+  const net = mixed ? netOf(v8, 8) + netOf(v10, 10) : netOf(incl, rate);
+  const tax = incl - net;
+  const gotAmount = incl > 0;
+  const metThreshold = net >= 5000;
+  const rateLabel = mixed ? '8% + 10%' : `${rate}`;
+
+  function buildDraft() {
+    return {
+      shop: parsed?.shop || '',
+      date: parsed?.date || todayStr(),
+      incl,
+      rate: mixed ? 'mixed' : rate,
+      incl8: mixed ? v8 || null : null,
+      incl10: mixed ? v10 || null : null,
+      refundMethod: refundMethod || 'unsure',
+    };
+  }
+
+  return (
+    <FullScreenSheet>
+      <div
+        className="sticky top-0 z-10 flex items-center justify-between kaeru-pad"
+        style={{
+          backgroundColor: C.page,
+          borderBottom: `1px solid ${C.ink}`,
+          paddingTop: 'max(16px, env(safe-area-inset-top))',
+          paddingBottom: '16px',
+        }}
+      >
+        <button onClick={onClose} style={{ fontSize: '13px', color: C.sub }}>
+          {t.cancel}
+        </button>
+        <h2 className="font-bold" style={{ fontSize: '15px' }}>
+          {t.quickAddTitle}
+        </h2>
+        <button
+          onClick={() => onSaveQuick(buildDraft(), imgs)}
+          disabled={!refundMethod}
+          className="font-bold disabled:opacity-40"
+          style={{ fontSize: '13px', color: C.blueDeep }}
+        >
+          {t.quickAddSave}
+        </button>
+      </div>
+
+      <div
+        className="kaeru-pad py-6"
+        style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}
+      >
+        <div>
+          <div
+            className="mx-auto"
+            style={{
+              width: '100%',
+              maxWidth: '196px',
+              height: '196px',
+              backgroundColor: C.soft,
+              border: `1px solid ${C.line}`,
+            }}
+          >
+            <img src={imgs[0]} alt="" className="h-full w-full object-contain" />
+          </div>
+          <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+            {gotAmount && <Badge tone="sage">{t.quickAddGotAmount}</Badge>}
+          </div>
+        </div>
+
+        <div style={{ backgroundColor: C.soft, padding: '14px' }}>
+          <div className="flex items-baseline justify-between gap-3">
+            <div className="min-w-0">
+              <p style={{ fontSize: '11px', color: C.sub }}>{t.quickAddReadIncl}</p>
+              <p
+                className="mt-1"
+                style={{ fontSize: '10.5px', color: C.sub, whiteSpace: 'nowrap' }}
+              >
+                {t.quickAddRateLine(rateLabel, yen(net), yen(tax))}
+              </p>
+            </div>
+            <p
+              className="shrink-0 font-semibold tabular-nums"
+              style={{ fontSize: '24px', color: C.ink }}
+            >
+              ¥{yen(incl)}
+            </p>
+          </div>
+          <div
+            style={{
+              borderTop: `1px solid ${C.line}`,
+              marginTop: '10px',
+              paddingTop: '10px',
+            }}
+          >
+            <span
+              className="font-semibold"
+              style={{ fontSize: '12px', color: metThreshold ? C.sage : C.clayInk }}
+            >
+              {metThreshold
+                ? t.reached
+                : `${t.notReached} · ${t.short} ¥${yen(5000 - net)}`}
+            </span>
+          </div>
+        </div>
+
+        <div>
+          <p className="font-bold" style={{ fontSize: '13px', color: C.ink }}>
+            {t.refundQ}
+          </p>
+          <div className="mt-2.5 flex gap-1.5">
+            {[
+              ['registered', t.refundOptRegistered],
+              ['no', t.refundOptNo],
+              ['unsure', t.refundOptUnsure],
+            ].map(([v, label]) => (
+              <button
+                key={v}
+                onClick={() => setRefundMethod(v)}
+                className="font-semibold"
+                style={{
+                  flex: 1,
+                  padding: '10px 0',
+                  fontSize: '13px',
+                  backgroundColor: refundMethod === v ? C.blue : C.soft,
+                  color: refundMethod === v ? '#FFFFFF' : C.ink,
+                  border: `1px solid ${refundMethod === v ? C.blue : C.line}`,
+                  borderRadius: 0,
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2" style={{ fontSize: '11.5px', color: C.sub, lineHeight: 1.7 }}>
+            {t.refundHint}
+          </p>
+        </div>
+
+        {!parsed?.shop && (
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p style={{ fontSize: '13px', color: C.ink }}>{t.pendingFieldsLabel}</p>
+              <p className="mt-0.5" style={{ fontSize: '11.5px', color: C.sub }}>
+                {t.pendingFieldsDesc}
+              </p>
+            </div>
+            <Badge tone="outline">{t.pendingBadge}</Badge>
+          </div>
+        )}
+
+        <div>
+          <button
+            onClick={() => onSaveQuick(buildDraft(), imgs)}
+            disabled={!refundMethod}
+            className="w-full py-3.5 text-sm font-semibold disabled:opacity-40"
+            style={{ backgroundColor: C.blue, color: '#FFFFFF' }}
+          >
+            {t.quickSaveCta}
+          </button>
+          <button
+            onClick={() => onSaveFull(buildDraft(), imgs)}
+            className="mt-3 w-full text-center font-semibold"
+            style={{ fontSize: '13px', color: C.blueDeep }}
+          >
+            {t.quickFullFormCta}
+          </button>
+        </div>
+      </div>
+    </FullScreenSheet>
+  );
+}
+
 function EditSheet({ t, initial, photos, onClose, onSave }) {
   const [shop, setShop] = useState(initial?.shop || '');
   const [date, setDate] = useState(initial?.date || todayStr());
@@ -5836,9 +6819,19 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
       ? ''
       : initial.taxOverride,
   );
-  const [refundReg, setRefundReg] = useState(
-    initial ? STAGES.indexOf(initial.status) >= 1 : false,
+  // 三選一：有登記／沒有／不確定。舊資料（這個欄位還沒出現前存的）沒有
+  // 存這個值，用當時的 status 反推——已經到了「已登記」以上的階段就當
+  // 「有登記」，不然一律當「不確定」（不能直接當「沒有」：那個布林開關
+  // 原本可能只是還沒去點，不代表使用者明確答過「沒有登記」）。
+  const [refundMethod, setRefundMethod] = useState(
+    initial?.refundMethod ||
+      (initial
+        ? STAGES.indexOf(initial.status) >= 1
+          ? 'registered'
+          : 'unsure'
+        : 'unsure'),
   );
+  const refundReg = refundMethod === 'registered';
   const [unpacked, setUnpacked] = useState(initial?.unpacked || false);
   const [consumed, setConsumed] = useState(initial?.consumed || false);
   const [note, setNote] = useState(initial?.note || '');
@@ -5858,7 +6851,13 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
         initial?.taxOverride === null || initial?.taxOverride === undefined
           ? ''
           : initial.taxOverride,
-      refundReg: initial ? STAGES.indexOf(initial.status) >= 1 : false,
+      refundMethod:
+        initial?.refundMethod ||
+        (initial
+          ? STAGES.indexOf(initial.status) >= 1
+            ? 'registered'
+            : 'unsure'
+          : 'unsure'),
       unpacked: initial?.unpacked || false,
       consumed: initial?.consumed || false,
       note: initial?.note || '',
@@ -5874,7 +6873,7 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
       incl10,
       rate,
       taxOverride,
-      refundReg,
+      refundMethod,
       unpacked,
       consumed,
       note,
@@ -5966,6 +6965,7 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
         incl8: incl8Filled ? v8 : null,
         incl10: incl10Filled ? v10 : null,
         taxOverride: taxOverride === '' ? null : Number(taxOverride),
+        refundMethod,
         unpacked,
         consumed,
         note: note.trim(),
@@ -6312,11 +7312,35 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
 
         {net >= 1000000 && <Notice tone="blue">{t.warnHigh}</Notice>}
 
-        <Toggle
-          checked={refundReg}
-          onChange={setRefundReg}
-          label={t.refundReg}
-        />
+        <Field label={t.refundReg}>
+          <div className="flex gap-1.5">
+            {[
+              ['registered', t.refundOptRegistered],
+              ['no', t.refundOptNo],
+              ['unsure', t.refundOptUnsure],
+            ].map(([v, label]) => (
+              <button
+                key={v}
+                onClick={() => setRefundMethod(v)}
+                className="font-semibold"
+                style={{
+                  flex: 1,
+                  padding: '10px 0',
+                  fontSize: '13px',
+                  backgroundColor: refundMethod === v ? C.blue : C.soft,
+                  color: refundMethod === v ? '#FFFFFF' : C.ink,
+                  border: `1px solid ${refundMethod === v ? C.blue : C.line}`,
+                  borderRadius: 0,
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2" style={{ fontSize: '11.5px', color: C.sub, lineHeight: 1.7 }}>
+            {t.refundHint}
+          </p>
+        </Field>
         <Toggle
           checked={unpacked}
           onChange={setUnpacked}
