@@ -1511,10 +1511,26 @@ const groupKey = (it) => `${(it.shop || '').trim()}||${it.date}`;
 function daysLeft(dateStr) {
   if (!dateStr) return null;
   const d = new Date(dateStr + 'T00:00:00');
+  // 只檢查 dateStr 是不是空字串不夠——資料匯入或損毀時，日期欄位可能
+  // 不是空的，但格式不對，new Date() 會產生 Invalid Date，後面的運算
+  // 會一路是 NaN，畫面上顯示「NaN 天」而不是安全地當作沒有日期。
+  if (isNaN(d.getTime())) return null;
   d.setDate(d.getDate() + 90);
   const now = new Date();
   now.setHours(0, 0, 0, 0);
   return Math.round((d - now) / 86400000);
+}
+
+// 首頁倒數（幾天幾小時）本身沒有 setInterval，dDays/dHours 只有在畫面
+// 因為別的原因重新 render 時才會跟著重算一次——使用者把首頁開著不動，
+// 倒數會停在打開那一刻，不會自然往下跳。這個 hook 每分鐘強迫重新
+// render 一次，讓倒數自己會動；小時以下的精細度用不到，一分鐘夠了。
+function useNowTick(intervalMs = 60000) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((n) => n + 1), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
 }
 
 function compressImage(file, maxSide = 1000, quality = 0.6) {
@@ -2417,8 +2433,12 @@ export default function App() {
     setTrips((prev) =>
       prev.map((x) => (x.id === id ? { ...x, endedPromptShown: true } : x)),
     );
+    // 依賴要連 activeTrip?.id 一起看——只看 shouldPromptEnded 這個布林值
+    // 的話，切到另一趟「同時也符合條件、還沒跳過」的行程時，React 看到
+    // true → true 沒有變化，不會重新執行這個 effect，新行程的提示永遠
+    // 跳不出來。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shouldPromptEnded]);
+  }, [shouldPromptEnded, activeTrip?.id]);
 
   function upsert(input, photosData) {
     const item = { ...input, tripId: input.tripId || activeId };
@@ -2898,6 +2918,7 @@ function HomeView({
   onEditTrip,
   onGoFaq,
 }) {
+  useNowTick();
   const dep = trip && trip.departure ? new Date(trip.departure) : null;
   const diffMs = dep ? dep - new Date() : null;
   const dDays = diffMs !== null ? Math.floor(diffMs / 86400000) : null;
@@ -3239,6 +3260,7 @@ function EmptyUnnamedTrip({ t, onEditTrip, onAdd }) {
 // 收據。金額用 sub 色顯示（¥0 只是佔位，不是真的有消費），收據區塊
 // 改成填色 CTA，底下留一個「先看一遍規則」去 FAQ 的連結。
 function EmptyNamedTrip({ t, trip, onAdd, onGoFaq, onGoSettings }) {
+  useNowTick();
   const airport = trip && trip.airport ? AIRPORTS.find((a) => a.code === trip.airport) : null;
   // 已經有名字、有回程時間，只是還沒收據——倒數不會因為沒收據就算不
   // 出來，畫面 39 的截圖本來就顯示倒數，只是下面接的內容換成「行程
@@ -4538,6 +4560,8 @@ function SettingsView({
   onClear,
 }) {
   const [confirm, setConfirm] = useState(false);
+  // 清空所有資料的確認也掛進返回鍵堆疊，理由同上。
+  useBackClose(confirm, () => setConfirm(false));
   const rowStyle = (first) => ({
     display: 'block',
     width: '100%',
@@ -4908,6 +4932,9 @@ function TripSheet({
   const [name, setName] = useState('');
   const [departure, setDeparture] = useState('');
   const [confirmId, setConfirmId] = useState(null);
+  // 刪除確認掛進返回鍵堆疊——不掛的話,使用者在看到「確定要刪除嗎」
+  // 那一刻按返回鍵，會直接跳過這層確認、關掉整層行程切換面板。
+  useBackClose(confirmId, () => setConfirmId(null));
 
   const countOf = (id) => items.filter((i) => i.tripId === id).length;
   const fmtDep = (v) =>
@@ -5113,6 +5140,8 @@ function TripEditSheet({
   const [airportOpen, setAirportOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   useBackClose(airportOpen, () => setAirportOpen(false));
+  // 刪除這趟行程的確認也掛進返回鍵堆疊，理由跟 TripSheet 的 confirmId 一樣。
+  useBackClose(confirmDelete, () => setConfirmDelete(false));
 
   const airportInfo = AIRPORTS.find((a) => a.code === airport);
 
@@ -7301,6 +7330,10 @@ function PhotoLightbox({
   const [scale, setScale] = useState(1);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // 刪除照片的確認也掛進返回鍵堆疊——這個放大檢視本身的開關由外層
+  // （DetailSheet/EditSheet）的 useBackClose 管，這裡另外多開一層只管
+  // 確認面板自己，讓返回鍵先關掉確認、不要直接跳兩層關掉整個放大檢視。
+  useBackClose(confirmDelete, () => setConfirmDelete(false));
   const [rotating, setRotating] = useState(false);
   const pointers = useRef(new Map());
   const pinchStart = useRef(null);
