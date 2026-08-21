@@ -1489,8 +1489,13 @@ const twd = (n) =>
   new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 0 }).format(
     Math.round(n || 0),
   );
+// 用 Math.floor 不是 Math.round——含稅金額換算稅抜金額，小數 ≥0.5 用
+// 四捨五入會多算 1 円，多筆商品加總後剛好卡在 5,000 円門檻邊界的組合，
+// 可能因為這 1-2 円的捨入差異被判定成「達標」或「未達標」，跟店家
+// 收銀機實際算出來的稅抜合計不一致。日本收銀機算稅抜金額慣例本來就是
+// 捨去小數，不是四捨五入，改成 floor 更貼近實際情況。
 const netOf = (incl, rate) =>
-  Math.round((incl || 0) / (1 + (rate || 10) / 100));
+  Math.floor((incl || 0) / (1 + (rate || 10) / 100));
 /* 混合稅率（8% 對象／10% 對象各一筆）：稅抜合計 = 兩段各自試算後相加，不是拿含稅總額套單一稅率 */
 const netOfItem = (it) =>
   it.rate === 'mixed'
@@ -2347,13 +2352,20 @@ export default function App() {
   }, [tripItems]);
 
   function taxOf(it) {
+    // 這張收據理論上能退的稅額上限：含稅金額－稅抜金額。
+    const naiveTax = (it.incl || 0) - netOfItem(it);
     if (
       it.taxOverride !== null &&
       it.taxOverride !== undefined &&
       it.taxOverride !== ''
-    )
-      return Number(it.taxOverride) || 0;
-    return (it.incl || 0) - netOfItem(it);
+    ) {
+      // #12 修正：手動輸入的退稅金額原本沒有跟這個理論上限比對，打錯
+      // 一個位數（例如多打一個 0）不會被擋下來，會直接算進可退稅總額、
+      // 查驗頁總額等所有地方。夾在 [0, naiveTax] 之間。
+      const override = Number(it.taxOverride) || 0;
+      return Math.min(Math.max(0, override), naiveTax);
+    }
+    return naiveTax;
   }
 
   function deleteTrip(id) {
@@ -2399,7 +2411,13 @@ export default function App() {
       const g = groups.get(groupKey(it));
       const eligible = g && g.ok && !it.consumed;
       if (eligible && it.status !== 'refunded') refundable += taxOf(it);
-      if (eligible && it.status === 'refunded') refundedTax += taxOf(it);
+      // #10 修正：原本只算 status==='refunded'——「已查驗」（在機場查驗
+      // 過、只是還沒手動標成「已退款」）的金額既不算進 refundable 之後
+      // 的顯示（行程「已出境」後首頁改看 refundedTax），也不算進這裡，
+      // 憑空從畫面上消失。查驗過就當作錢已經到手，跟 refundable 那邊
+      // 「!== 'refunded'」互斥，不會被算兩次。
+      if (eligible && (it.status === 'verified' || it.status === 'refunded'))
+        refundedTax += taxOf(it);
       // 已在境內吃掉/用掉的收據退不了稅，不算「還沒處理」，跟
       // tripStatsFor 的 pending 判斷一致，不然首頁「還沒處理」的張數
       // 跟最近到期倒數，會把已經失效、退不了稅的收據也算進去。
@@ -3788,8 +3806,11 @@ function CheckView({ t, items, groups, taxOf, onVerifyAll, onVerifyOne }) {
     .sort((a, b) => a.date.localeCompare(b.date));
   const done = eligible.length - todo.length;
   const total = todo.reduce((s, i) => s + taxOf(i), 0);
+  // 跟首頁 stats.refundedTax 同一個修正：已查驗（verified）也算進「已退」
+  // 這個數字，不然這張收據的金額會兩邊金額欄位都看不到（不在 todo，
+  // 因為已經查驗過；也不在原本只算 refunded 的這個總額）。
   const refunded = eligible
-    .filter((it) => it.status === 'refunded')
+    .filter((it) => it.status === 'verified' || it.status === 'refunded')
     .reduce((s, i) => s + taxOf(i), 0);
   const pct = eligible.length ? Math.round((done / eligible.length) * 100) : 0;
 
@@ -4232,6 +4253,18 @@ function Scenario({ t, lang, onExit }) {
     const misses = log.filter((x) => x.lose > 0 || x.penalty);
     const successCount = SIM.steps.length - misses.length;
     const pct = Math.round((got / SIM.max) * 100);
+    // #14 修正：每一題卡片上顯示的「損失 ¥X」原本是各題各自的原始
+    // 金額；題目之間如果對同一件虛擬商品有矛盾判定，逐題金額加總會
+    // 超過上面「總共損失」（已經用 Math.min 封頂）的數字，畫面上兩個
+    // 數字會自己矛盾。改成顯示「算進這一題之後，封頂總額往上增加了
+    // 多少」，逐題累加起來保證跟封頂後的總額一致。
+    let runningRaw = 0;
+    const missesDisplay = misses.map((m) => {
+      const before = Math.min(runningRaw, SIM.max);
+      runningRaw += m.lose;
+      const after = Math.min(runningRaw, SIM.max);
+      return { ...m, displayLose: after - before };
+    });
     return (
       <div className="space-y-10 pb-6 pt-2">
         <style>{keyframes}</style>
@@ -4312,7 +4345,7 @@ function Scenario({ t, lang, onExit }) {
           <section style={{ borderTop: `1px solid ${C.ink}`, paddingTop: '16px' }}>
             <SectionLabel>{t.simWhy}</SectionLabel>
             <div className="mt-3">
-              {misses.map((m, n) => (
+              {missesDisplay.map((m, n) => (
                 <div
                   key={n}
                   className="py-5"
@@ -4325,9 +4358,9 @@ function Scenario({ t, lang, onExit }) {
                     >
                       {t.simStep} {String(m.step + 1).padStart(2, '0')}
                     </span>
-                    {m.lose > 0 && (
+                    {m.displayLose > 0 && (
                       <Badge tone="clay">
-                        {t.simLost} ¥{yen(m.lose)}
+                        {t.simLost} ¥{yen(m.displayLose)}
                       </Badge>
                     )}
                   </div>
@@ -4616,11 +4649,14 @@ function SettingsView({
         <input
           type="number"
           step="0.0001"
+          min="0"
           value={settings.rate}
           onChange={(e) =>
             setSettings((s) => ({
               ...s,
-              rate: Number(e.target.value) || 0,
+              // #13 修正：原本沒有防呆，可以打負數匯率，會讓所有 NT$
+              // 換算的地方顯示負的台幣金額。夾在 0 以上。
+              rate: Math.max(0, Number(e.target.value) || 0),
               rateAt: null,
             }))
           }
@@ -6141,7 +6177,13 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
                 placeholder={`¥${yen(autoTax)}`}
                 value={taxOverride === '' ? '' : `¥${yen(taxOverride)}`}
                 onChange={(e) =>
-                  setTaxOverride(e.target.value.replace(/[^\d]/g, ''))
+                  // 打字時就把值夾在 [0, autoTax]——理論退稅上限，不等
+                  // 使用者存檔後才發現多打一個 0 被吃進總額裡。
+                  setTaxOverride(() => {
+                    const digits = e.target.value.replace(/[^\d]/g, '');
+                    if (digits === '') return '';
+                    return String(Math.min(Number(digits), autoTax));
+                  })
                 }
                 className="bg-transparent text-right font-semibold tabular-nums outline-none"
                 style={{
