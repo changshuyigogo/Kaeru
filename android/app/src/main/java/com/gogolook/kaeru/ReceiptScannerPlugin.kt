@@ -169,9 +169,28 @@ class ReceiptScannerPlugin : Plugin() {
     recognizer
       .process(image)
       .addOnSuccessListener { result ->
-        val lines = result.textBlocks.flatMap { it.lines }.map { it.text }
+        val allLines = result.textBlocks.flatMap { it.lines }
+        // text 保留給還沒更新過、只認舊格式（純字串）的呼叫端用；lines
+        // 額外把每一行的座標（左上原點，Y 軸朝下，跟 Bitmap 像素座標
+        // 一致）一起帶出去，JS 端才能自己依「同一橫排」重組閱讀順序——
+        // ML Kit 是照它自己切出來的文字區塊順序回傳整份文字，遇到「左邊
+        // 一整欄標籤、右邊一整欄金額」這種排版，常常會把兩欄各自切成
+        // 不同區塊，回傳順序變成「標籤全部先列完，金額才接著列」，跟
+        // 標籤金額原本的左右對應關係整個脫節，只給文字沒辦法救回來。
+        val linesArray = JSArray()
+        for (line in allLines) {
+          val box = line.boundingBox
+          val item = JSObject()
+          item.put("text", line.text)
+          item.put("top", box?.top ?: 0)
+          item.put("left", box?.left ?: 0)
+          item.put("bottom", box?.bottom ?: 0)
+          item.put("right", box?.right ?: 0)
+          linesArray.put(item)
+        }
         val ret = JSObject()
-        ret.put("text", lines.joinToString("\n"))
+        ret.put("text", allLines.joinToString("\n") { it.text })
+        ret.put("lines", linesArray)
         call.resolve(ret)
       }
       .addOnFailureListener { e -> call.reject("recognize_failed", e) }

@@ -70,8 +70,32 @@ public class ReceiptScannerPlugin: CAPPlugin, CAPBridgedPlugin {
         return
       }
       let observations = (req.results as? [VNRecognizedTextObservation]) ?? []
-      let lines = observations.compactMap { $0.topCandidates(1).first?.string }
-      call.resolve(["text": lines.joined(separator: "\n")])
+      // text 保留給還沒更新過、只認舊格式（純字串）的呼叫端用；lines
+      // 額外把每一行的座標一起帶出去，JS 端才能自己依「同一橫排」重組
+      // 閱讀順序（理由跟 Android 那邊一樣：Vision 是照它自己的區塊順序
+      // 回傳，遇到「左邊一整欄標籤、右邊一整欄金額」這種排版，常常會把
+      // 兩欄拆成不同區塊，回傳順序變成標籤跟金額脫節）。Vision 的
+      // boundingBox 是正規化座標（0–1）、原點在左下角、Y 軸朝上，跟
+      // Android Bitmap 慣用的左上原點、Y 軸朝下相反，這裡先轉成一致的
+      // 「左上原點、Y 軸朝下」慣例，JS 端就不用管兩個平台座標系不同。
+      var linesPayload: [[String: Any]] = []
+      var textLines: [String] = []
+      for obs in observations {
+        guard let text = obs.topCandidates(1).first?.string else { continue }
+        textLines.append(text)
+        let box = obs.boundingBox
+        linesPayload.append([
+          "text": text,
+          "top": 1.0 - box.maxY,
+          "left": box.minX,
+          "bottom": 1.0 - box.minY,
+          "right": box.maxX,
+        ])
+      }
+      call.resolve([
+        "text": textLines.joined(separator: "\n"),
+        "lines": linesPayload,
+      ])
     }
     request.recognitionLevel = .accurate
     request.recognitionLanguages = ["ja-JP", "en-US"]

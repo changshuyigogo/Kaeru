@@ -1824,6 +1824,56 @@ function formatBytes(bytes) {
 
 // 從 OCR 辨識出的原始文字，抓「N%対象 金額円」這種日本收據固定格式。
 // 找不到任何 %対象 就整個回傳 null——OCR 是省打字，不是猜答案，讀不到不要生數字。
+// 把 OCR 回傳的每一行文字（各自帶座標）依垂直位置分組成「同一橫排」，
+// 橫排內再依水平位置從左到右排好，重新拼出跟收據實際排版一致的閱讀
+// 順序。原生端（ML Kit／Vision）是照它們自己切出來的文字區塊順序回傳
+// 整份文字，遇到「左邊一整欄標籤、右邊一整欄金額」這種排版，常常會把
+// 兩欄各自切成不同區塊，回傳順序變成「標籤全部先列完，金額才接著
+// 列」，跟標籤金額原本的左右對應關係整個脫節——只給文字本身救不回來，
+// 要靠座標重新配對。座標單位（像素或 0–1 正規化）兩邊平台不一樣，但
+// 這裡只在同一次呼叫回來的資料裡互相比較相對位置，不需要統一單位。
+function reconstructRowsFromLines(lines) {
+  if (!lines || !lines.length) return '';
+  const items = lines
+    .filter((l) => l && typeof l.text === 'string' && l.text.trim())
+    .map((l) => ({
+      text: l.text,
+      top: Number(l.top) || 0,
+      left: Number(l.left) || 0,
+      bottom: Number(l.bottom) || 0,
+      right: Number(l.right) || 0,
+    }));
+  if (!items.length) return '';
+  items.sort((a, b) => a.top + a.bottom - (b.top + b.bottom));
+
+  const rows = [];
+  for (const item of items) {
+    const height = Math.max(1, item.bottom - item.top);
+    // 跟現有的每一排比，垂直範圍重疊超過這一行高度一半，就當作同一排
+    // ——收據上左右兩欄、同一橫排的文字，高度通常差不多。
+    let row = rows.find((r) => {
+      const overlap = Math.min(r.bottom, item.bottom) - Math.max(r.top, item.top);
+      return overlap > Math.min(r.bottom - r.top, height) * 0.5;
+    });
+    if (!row) {
+      row = { top: item.top, bottom: item.bottom, items: [] };
+      rows.push(row);
+    }
+    row.top = Math.min(row.top, item.top);
+    row.bottom = Math.max(row.bottom, item.bottom);
+    row.items.push(item);
+  }
+  rows.sort((a, b) => a.top + a.bottom - (b.top + b.bottom));
+  return rows
+    .map((r) =>
+      r.items
+        .sort((a, b) => a.left - b.left)
+        .map((i) => i.text)
+        .join(' '),
+    )
+    .join('\n');
+}
+
 function parseReceiptOCR(text) {
   if (!text) return null;
   const norm = text.replace(/[，]/g, ',');
@@ -1842,16 +1892,29 @@ function parseReceiptOCR(text) {
     if (amt > 0 && !(m[1] in found)) found[m[1]] = amt;
   }
   const rates = Object.keys(found);
-  if (rates.length === 0) return null;
 
   const result = {};
   if (rates.length >= 2) {
     result.rate = 'mixed';
     result.incl8 = found['8'] || null;
     result.incl10 = found['10'] || null;
-  } else {
+  } else if (rates.length === 1) {
     result.rate = Number(rates[0]);
     result.incl = found[rates[0]];
+  } else {
+    // 讀不到「N%對象」這種便利商店/藥妝店式標籤——不是所有收據都會
+    // 印稅率明細，退而求其次找「合計/お会計/總額」這種一般收銀機常見
+    // 的總額標籤+金額，當作含稅總額，稅率不知道所以先預設 10%（較常
+    // 見），存進表單後使用者自己確認調整；「合計」要排除掉「合計点數」
+    // 這種列商品件數、不是列金額的行，不然會把件數誤當金額抓進來。
+    // 兩種格式都找不到才真的放棄，回傳 null。
+    const totalRe = /(?:合計(?!點數|点数)|お会計|ご請求金額|總額|総額)[^\d]{0,8}([\d,]{2,9})\s*円?/;
+    const totalMatch = norm.match(totalRe);
+    if (!totalMatch) return null;
+    const amt = Number(totalMatch[1].replace(/,/g, ''));
+    if (amt <= 0) return null;
+    result.rate = 10;
+    result.incl = amt;
   }
 
   const lines = norm
@@ -7695,10 +7758,24 @@ function PhotoConfirmSheet({ t, src, fromScan, onRetake, onUse, onClose }) {
         const b64Src = src.startsWith('data:') ? src : await compressImageSrc(src, 1600, 0.85);
         const res = await ReceiptScanner.recognizeText({ image: b64Src });
         if (!alive) return;
-        // 方便真機除錯：辨識出的原始文字跟解析結果都印出來，
-        // 「讀不到」跟「辨識本身失敗」在畫面上長一樣，但 console 看得出差別
-        console.log('[ReceiptScanner] recognized text:', res?.text);
-        const parsed = parseReceiptOCR(res?.text || '');
+        // 有座標（lines）就用它重組出跟收據實際排版一致的閱讀順序，
+        // 原生端直接接好的 text 常常是「左欄全部先列完，右欄才接著
+        // 列」，標籤跟金額對不起來；沒有座標（例如原生端還沒更新過）
+        // 才退回用 text。
+        const reconstructed = res?.lines?.length
+          ? reconstructRowsFromLines(res.lines)
+          : '';
+        const forParse = reconstructed || res?.text || '';
+        // 方便真機除錯：原始文字、重組後文字、解析結果都印出來——
+        // 「讀不到」跟「辨識本身失敗」在畫面上長一樣，但 console 看得出差別，
+        // 重組後文字如果還是抓不到，代表要調的是 parseReceiptOCR 的規則，
+        // 不是座標重組本身。
+        console.log('[ReceiptScanner] recognized text (raw):', res?.text);
+        console.log(
+          '[ReceiptScanner] recognized text (reconstructed by position):',
+          reconstructed,
+        );
+        const parsed = parseReceiptOCR(forParse);
         console.log('[ReceiptScanner] parsed:', parsed);
         setOcr({ loading: false, parsed });
       } catch (err) {
