@@ -209,6 +209,20 @@ const photoKey = (id) => `jptax:photo:${id}`;
 const STAGES = ['purchased', 'registered', 'verified', 'refunded'];
 const MAX_PHOTOS = 4; // 一張收據最多存幾張照片
 
+// refundMethod 這個欄位是後來才加的，舊收據沒存過這個值，要從當時的
+// status 反推。只有 status 剛好停在「已登記」（STAGES 索引 1）才是
+// 可靠訊號——這個 app 裡只有主動勾選「有登記退款方式」才會停在這一站。
+// 一旦繼續推進到「已查驗」或「已退款」，可能是使用者自己在表單裡一路
+// 點過去（那樣真的有登記），也可能是查驗頁的「全部標記為已查驗」直接
+// 從「已購買」跳過去（那個動作完全不會讀退款方式，見 CheckView 的
+// onVerifyAll）——兩條路徑存下來的 status 長得一樣，分不出來，這時候
+// 老實回答「不確定」，不要在沒有真正依據的情況下替使用者捏造答案。
+function inferRefundMethod(initial) {
+  if (!initial) return 'unsure';
+  if (initial.refundMethod) return initial.refundMethod;
+  return STAGES.indexOf(initial.status) === 1 ? 'registered' : 'unsure';
+}
+
 // 日本有國際定期航線的機場約 34 座，只放這些，不追求完整——找不到就選
 // 「其他機場」，用預設 3 小時。region 是地區 key（對應 AIRPORT_REGIONS），
 // city 是機場所在城市，hours 是建議提早幾小時（給總覽倒數區跟回程當天
@@ -1626,7 +1640,13 @@ function isPendingInfo(it) {
 // 對待方式：不刪除、不隱藏，但不再算進「還沒處理」或「預估可退稅額」，
 // 因為那筆錢已經拿不回來了，算進去只會讓使用者以為還有機會。
 function isExpiredUnclaimed(it) {
-  if (it.status === 'refunded' || it.consumed) return false;
+  // 「已查驗」（verified）跟這個 app 其他地方的既有慣例一樣，要當成
+  // 錢已經到手——只排除 'refunded' 不夠，會讓已經查驗過、只是還沒
+  // 手動標「已退款」的收據，一旦超過 90 天就被誤判成「來不及、拿不
+  // 回來」，從 refundedTax 消失，又同時被算進「還沒處理」跳期限
+  // 警示，兩邊自相矛盾。
+  if (it.status === 'refunded' || it.status === 'verified' || it.consumed)
+    return false;
   const d = daysLeft(it.date);
   return d !== null && d < 0;
 }
@@ -2536,8 +2556,12 @@ export default function App() {
       // #10 修正：原本只算 status==='refunded'——「已查驗」（在機場查驗
       // 過、只是還沒手動標成「已退款」）的金額既不算進 refundable 之後
       // 的顯示（行程「已出境」後首頁改看 refundedTax），也不算進這裡，
-      // 憑空從畫面上消失。查驗過就當作錢已經到手，跟 refundable 那邊
-      // 「!== 'refunded'」互斥，不會被算兩次。
+      // 憑空從畫面上消失。查驗過就當作錢已經到手。
+      // 注意：verified 的收據會同時被算進上面的 refundable——這不是
+      // 沒扣乾淨，是故意的：refundable／refundedTax 不是「互斥的兩個
+      // 集合」，是同一批收據在「出境前」跟「出境後」兩個時間點各自
+      // 該顯示的數字（首頁用 departed 決定顯示哪一個，見 3410/3417 附
+      // 近），兩個都要包含 verified，只是從來不會同時加總在一起顯示。
       if (eligible && (it.status === 'verified' || it.status === 'refunded'))
         refundedTax += taxOf(it);
       // 已在境內吃掉/用掉的收據退不了稅，不算「還沒處理」，跟
@@ -4154,7 +4178,13 @@ function ListView({ t, items, groups, taxOf, settings, onOpen, onAdd }) {
         .filter((k) =>
           groups.get(k).arr.some((it) => !isPendingInfo(it) && match(it)),
         )
-        .sort((a, b) => b.split('||')[1].localeCompare(a.split('||')[1]))
+        // 排序直接讀該組第一筆收據的 date，不要切 key 字串——key 是
+        // `店名||日期` 手動拼出來的，店名要是剛好包含 "||" 這個子字串
+        // （不無可能，店名是使用者自己輸入的自由文字），split 出來的
+        // 段數會跑掉，日期就不會是預期的那一段。
+        .sort((a, b) =>
+          groups.get(b).arr[0].date.localeCompare(groups.get(a).arr[0].date),
+        )
     : [];
 
   const nothingToShow =
@@ -4230,15 +4260,25 @@ function ListView({ t, items, groups, taxOf, settings, onOpen, onAdd }) {
         <div className="kaeru-group-gap">
           {keys.map((k) => {
             const g = groups.get(k);
-            const [shop, date] = k.split('||');
+            // 直接讀這組收據本身的 shop/date，不要切 key 字串——理由跟
+            // 上面排序那段一樣，店名裡萬一有 "||" 會讓 split 錯位。
+            const { shop, date } = g.arr[0];
             // 同一組所有收據共用同一個日期——過期不過期整組會一起翻，直接
-            // 拿這個日期算一次就好。已在境內消費的不算「錯過」，那個有
-            // 自己的一整套失效樣式。
+            // 拿這個日期算一次就好。跟每張卡片自己的 expiredDead 判斷
+            // 要一致：已在境內消費、已查驗、已退款都不算「錯過」，只有
+            // 還卡在購買/登記階段、又超過 90 天的才算，不然表頭顯示
+            // 「已過期」但裡面的卡片（例如已經退款的那張）卻正常顯示，
+            // 兩邊會自相矛盾。
             const groupDays = daysLeft(date);
             const groupExpired =
-              !g.arr.every((it) => it.consumed) &&
               groupDays !== null &&
-              groupDays < 0;
+              groupDays < 0 &&
+              g.arr.some(
+                (it) =>
+                  !it.consumed &&
+                  it.status !== 'refunded' &&
+                  it.status !== 'verified',
+              );
             return (
               <section key={k}>
                 <div
@@ -4378,14 +4418,26 @@ function ReceiptCard({ it, t, taxOf, settings, groupOk, separator, onClick }) {
   // 失效樣式（卡底色、金額劃線）——但這是「來不及」不是「用掉了」，徽章
   // 跟說明文字要分開寫，進度軌跡也保留原本走到哪一步，不像消費那樣整個
   // 收縮成卡在第一步。
+  // 跟 isExpiredUnclaimed() 同一個判斷：已查驗（verified）也要當成錢
+  // 已經到手，不然一張查驗過但還沒手動標「已退款」的收據，一旦超過
+  // 90 天就會被畫成失效樣式,跟首頁 stats.refundedTax 早就把它算進
+  // 「已退回」的邏輯自相矛盾。
   const expiredDead =
-    !consumedDead && it.status !== 'refunded' && d !== null && d < 0;
+    !consumedDead &&
+    it.status !== 'refunded' &&
+    it.status !== 'verified' &&
+    d !== null &&
+    d < 0;
   const dead = consumedDead || expiredDead;
   const warn = !dead && !groupOk;
   const stageIdx = STAGES.indexOf(it.status);
   const deadlineText =
     d === null ? null : d < 0 ? t.expired : `${t.warnDeadline} ${d} ${t.days}`;
-  const showDeadlineBadge = !dead && d !== null && d <= 30;
+  // d &lt; 0（已經過期）現在不再保證 dead 是 true——已查驗/已退款的收據
+  // 就算超過 90 天也不算「來不及」（expiredDead 已經排除這兩種狀態），
+  // 但那種情況下「期限剩 N 天」倒數徽章一樣沒意義，不能顯示負數天數，
+  // 要另外擋掉，不能只靠 !dead。
+  const showDeadlineBadge = !dead && d !== null && d >= 0 && d <= 30;
   const showPendingBadge = !dead && !warn && stageIdx < 2;
   const tone = warn ? C.clay : expiredDead ? C.sub : C.blue;
 
@@ -4491,7 +4543,13 @@ function ReceiptCard({ it, t, taxOf, settings, groupOk, separator, onClick }) {
             {it.unpacked && <Badge tone="outline">{t.unpackedShort}</Badge>}
           </>
         ) : expiredDead ? (
-          <Badge tone="clay">{t.expiredBadge}</Badge>
+          <>
+            <Badge tone="clay">{t.expiredBadge}</Badge>
+            {it.unpacked && <Badge tone="outline">{t.unpackedShort}</Badge>}
+            {it.refundMethod === 'registered' && (
+              <Badge tone="outline">{t.refundReg}</Badge>
+            )}
+          </>
         ) : (
           <>
             {warn ? (
@@ -6375,6 +6433,13 @@ function usePhotoCapture({ imgs, setImgs, onParsed }) {
   const [photoPromptOpen, setPhotoPromptOpen] = useState(false);
   const [photoDenied, setPhotoDenied] = useState(null); // null | 'camera' | 'photos'
   const [confirmPhoto, setConfirmPhoto] = useState(null); // { src, fromScan } | null
+  // openCamera/openLibrary/openScan 一開始就同步把 photoPromptOpen 設成
+  // false，然後才 await 原生相機/相簿/掃描的結果——中間那段「原生還沒
+  // 回來」的空檔，photoPromptOpen/confirmPhoto/photoDenied 全部都是空的，
+  // 跟「使用者主動放棄、什麼都沒選」長得一模一樣。任何呼叫端如果拿這三
+  // 個狀態去判斷「使用者是不是放棄了」，都會在這個空檔誤判。capturing
+  // 就是用來把這個「原生呼叫還在進行中」的狀態明確標出來。
+  const [capturing, setCapturing] = useState(false);
   const fileRef = useRef(null);
   const remaining = MAX_PHOTOS - imgs.length;
   useBackClose(photoPromptOpen, () => setPhotoPromptOpen(false));
@@ -6410,6 +6475,7 @@ function usePhotoCapture({ imgs, setImgs, onParsed }) {
 
   async function openCamera() {
     setPhotoPromptOpen(false);
+    setCapturing(true);
     try {
       // 用 Uri 不用 DataUrl：DataUrl 要原生端先把整張全解析度照片轉成
       // base64 字串才會把結果傳回來，拍完之後那段「等」就是卡在這裡。
@@ -6424,11 +6490,14 @@ function usePhotoCapture({ imgs, setImgs, onParsed }) {
       if (shot?.webPath) setConfirmPhoto({ src: shot.webPath, fromScan: false });
     } catch (err) {
       if (isPermissionDenied(err)) setPhotoDenied('camera');
+    } finally {
+      setCapturing(false);
     }
   }
 
   async function openLibrary() {
     setPhotoPromptOpen(false);
+    setCapturing(true);
     try {
       // pickImages 是舊版 API，已標記 deprecated，多選在部分裝置上不
       // 可靠；chooseFromGallery 才是目前真的支援多選的方法，要自己開
@@ -6447,11 +6516,14 @@ function usePhotoCapture({ imgs, setImgs, onParsed }) {
       }
     } catch (err) {
       if (isPermissionDenied(err)) setPhotoDenied('photos');
+    } finally {
+      setCapturing(false);
     }
   }
 
   async function openScan() {
     setPhotoPromptOpen(false);
+    setCapturing(true);
     try {
       const res = await ReceiptScanner.scanDocument();
       const images = res?.images || [];
@@ -6471,6 +6543,8 @@ function usePhotoCapture({ imgs, setImgs, onParsed }) {
       }
     } catch (err) {
       if (isPermissionDenied(err)) setPhotoDenied('camera');
+    } finally {
+      setCapturing(false);
     }
   }
 
@@ -6478,6 +6552,21 @@ function usePhotoCapture({ imgs, setImgs, onParsed }) {
     setConfirmPhoto(null);
     if (src) setImgs((p) => (p.length < MAX_PHOTOS ? [...p, src] : p));
     if (parsed && onParsed) onParsed(parsed);
+  }
+
+  // 重拍：關掉目前的確認畫面、重新跳一次來源選單。中間夾了
+  // deferOpen（避免 confirmPhoto 那層 history.back() 跟重新
+  // pickPhoto() 的 pushState 同一 tick 搶跑），這段空檔跟原生呼叫
+  // 還沒回來的空檔是同一種「看起來像放棄，其實不是」的狀態，一樣
+  // 靠 capturing 標起來，等真的重新跳出選單（或使用者這次真的沒選
+  // 東西）才放開。
+  function retake() {
+    setCapturing(true);
+    setConfirmPhoto(null);
+    deferOpen(() => {
+      setCapturing(false);
+      pickPhoto();
+    });
   }
 
   function removeImg(idx) {
@@ -6489,6 +6578,7 @@ function usePhotoCapture({ imgs, setImgs, onParsed }) {
     setPhotoPromptOpen,
     photoDenied,
     confirmPhoto,
+    capturing,
     fileRef,
     remaining,
     onPick,
@@ -6497,6 +6587,7 @@ function usePhotoCapture({ imgs, setImgs, onParsed }) {
     openLibrary,
     openScan,
     finishConfirm,
+    retake,
     removeImg,
   };
 }
@@ -6559,10 +6650,7 @@ function PhotoCaptureSheets({ t, cap }) {
           t={t}
           src={cap.confirmPhoto.src}
           fromScan={cap.confirmPhoto.fromScan}
-          onRetake={() => {
-            cap.finishConfirm(null);
-            deferOpen(() => cap.pickPhoto());
-          }}
+          onRetake={cap.retake}
           onUse={cap.finishConfirm}
           onClose={() => cap.finishConfirm(null)}
         />
@@ -6599,16 +6687,29 @@ function QuickAddFlow({ t, onClose, onSaveQuick, onSaveFull }) {
     }
     // 相機/相簿權限被拒時要讓使用者看得到原因、有機會去設定開啟，
     // 不能默默把整條快路關掉——那樣使用者永遠不知道發生了什麼事。
+    // cap.capturing 一定要排除掉：openCamera/openLibrary/openScan 一
+    // 開始就同步把 photoPromptOpen 設成 false，然後才 await 原生結果，
+    // 那段「原生還沒回來」的空檔，跟真的什麼都沒選、放棄整條快路，從
+    // 這四個狀態看起來一模一樣——沒有這個旗標的話，點「拍照」的當下
+    // 就會被這裡誤判成放棄，直接把整條快路關掉，原生相機根本還沒跳
+    // 出來。
     if (
       !imgs.length &&
       !cap.photoPromptOpen &&
       !cap.confirmPhoto &&
-      !cap.photoDenied
+      !cap.photoDenied &&
+      !cap.capturing
     ) {
       onClose();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cap.photoPromptOpen, cap.confirmPhoto, cap.photoDenied, imgs.length]);
+  }, [
+    cap.photoPromptOpen,
+    cap.confirmPhoto,
+    cap.photoDenied,
+    cap.capturing,
+    imgs.length,
+  ]);
 
   if (!imgs.length) {
     return (
@@ -6819,18 +6920,9 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
       ? ''
       : initial.taxOverride,
   );
-  // 三選一：有登記／沒有／不確定。舊資料（這個欄位還沒出現前存的）沒有
-  // 存這個值，用當時的 status 反推——已經到了「已登記」以上的階段就當
-  // 「有登記」，不然一律當「不確定」（不能直接當「沒有」：那個布林開關
-  // 原本可能只是還沒去點，不代表使用者明確答過「沒有登記」）。
-  const [refundMethod, setRefundMethod] = useState(
-    initial?.refundMethod ||
-      (initial
-        ? STAGES.indexOf(initial.status) >= 1
-          ? 'registered'
-          : 'unsure'
-        : 'unsure'),
-  );
+  // 三選一：有登記／沒有／不確定。舊資料用 inferRefundMethod() 從
+  // status 反推（見該函式註解，只有停在「已登記」那一站才是可靠訊號）。
+  const [refundMethod, setRefundMethod] = useState(inferRefundMethod(initial));
   const refundReg = refundMethod === 'registered';
   const [unpacked, setUnpacked] = useState(initial?.unpacked || false);
   const [consumed, setConsumed] = useState(initial?.consumed || false);
@@ -6851,13 +6943,7 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
         initial?.taxOverride === null || initial?.taxOverride === undefined
           ? ''
           : initial.taxOverride,
-      refundMethod:
-        initial?.refundMethod ||
-        (initial
-          ? STAGES.indexOf(initial.status) >= 1
-            ? 'registered'
-            : 'unsure'
-          : 'unsure'),
+      refundMethod: inferRefundMethod(initial),
       unpacked: initial?.unpacked || false,
       consumed: initial?.consumed || false,
       note: initial?.note || '',
@@ -6937,6 +7023,12 @@ function EditSheet({ t, initial, photos, onClose, onSave }) {
       `r_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     let status = initial?.status || 'purchased';
     if (refundReg && STAGES.indexOf(status) < 1) status = 'registered';
+    // 這裡故意只在 status 剛好停在「已登記」(=== 1) 才退回「已購買」，
+    // 不是 <= 1——如果 status 已經推進到「已查驗」或「已退款」，那是
+    // 真實世界發生過的事（機場真的查驗過、錢真的進來過），不能因為
+    // 使用者事後把退款方式改成「沒有/不確定」就往回洗掉，跟下面
+    // consumed 那條「只把已查驗退回已登記」是同一個原則：退款方式這
+    // 個欄位跟查驗/退款是兩件事，反悔前者不代表後者沒發生過。
     if (!refundReg && STAGES.indexOf(status) === 1) status = 'purchased';
     // 只把「已查驗」退回「已登記」——已經退款是既成事實，事後補記
     // 「這張也在境內用掉了」不該把已經拿到手的退款記錄洗掉。
@@ -7860,7 +7952,17 @@ function DetailSheet({
 }) {
   const d = daysLeft(item.date);
   const tax = taxOf(item);
-  const dead = !!item.consumed;
+  const consumedDead = !!item.consumed;
+  // 跟 ReceiptCard/isExpiredUnclaimed 同一套判斷：已查驗/已退款的收據
+  // 就算超過 90 天也不算「來不及」，錢已經到手或查驗過了；只有還卡在
+  // 購買/登記階段、又超過 90 天的才算真的錯過。
+  const expiredDead =
+    !consumedDead &&
+    item.status !== 'refunded' &&
+    item.status !== 'verified' &&
+    d !== null &&
+    d < 0;
+  const dead = consumedDead || expiredDead;
   const groupOk = !!(group && group.ok);
   const blocked = dead || !groupOk;
   const cur = STAGES.indexOf(item.status);
@@ -7964,11 +8066,14 @@ function DetailSheet({
         >
           {item.date}
           {dead
-            ? ` · ${t.stalledShort}`
+            ? ` · ${consumedDead ? t.stalledShort : t.expiredBadge}`
             : refunded
               ? ` · ${t.caseClosed}`
-              : d !== null
-                ? ` · ${d < 0 ? t.expired : `${t.warnDeadline} ${d} ${t.days}`}`
+              : // d < 0 在這裡代表「已查驗但超過 90 天」（expiredDead 已經
+                // 排除掉這個狀態）——deadline 對已查驗的收據沒有意義了，
+                // 不要顯示負數天數，乾脆不顯示這段。
+                d !== null && d >= 0
+                ? ` · ${t.warnDeadline} ${d} ${t.days}`
                 : ''}
         </p>
 
@@ -8031,11 +8136,19 @@ function DetailSheet({
         </div>
 
         <div className="mt-4 flex flex-wrap gap-1.5">
-          {dead ? (
+          {consumedDead ? (
             <>
               <Badge tone="clay">{t.consumedShort}</Badge>
               <Badge tone="clay">{t.dead}</Badge>
               {item.unpacked && <Badge tone="outline">{t.unpackedShort}</Badge>}
+            </>
+          ) : expiredDead ? (
+            <>
+              <Badge tone="clay">{t.expiredBadge}</Badge>
+              {item.unpacked && <Badge tone="outline">{t.unpackedShort}</Badge>}
+              {item.refundMethod === 'registered' && (
+                <Badge tone="outline">{t.refundReg}</Badge>
+              )}
             </>
           ) : refunded ? (
             <Badge tone="sage">{t.stage.refunded}</Badge>
@@ -8050,6 +8163,9 @@ function DetailSheet({
                 <Badge tone="blue">{t.pendingCheck}</Badge>
               )}
               {item.unpacked && <Badge tone="outline">{t.unpackedShort}</Badge>}
+              {item.refundMethod === 'registered' && (
+                <Badge tone="outline">{t.refundReg}</Badge>
+              )}
             </>
           )}
         </div>
@@ -8069,7 +8185,13 @@ function DetailSheet({
             {STAGES.map((s, i) => {
               const reached = i <= cur;
               const isCur = i === cur && !dead;
-              const stalledRow = dead && i === 1;
+              // 只有真的在境內消費（consumedDead）才把整條進度收縮成
+              // 「卡在第一步」——那是整張作廢，走到哪一步不重要。過期
+              // 未退（expiredDead）沒有這回事，它就真的停在購買或登記
+              // 那一步（expiredDead 的定義本來就排除了 verified/
+              // refunded），照實際走到哪一步顯示就好，不用假裝退回第
+              // 一步。
+              const stalledRow = consumedDead && i === 1;
               const dis = blocked && i >= 2;
               const label = stalledRow ? t.stalledShort : t.stage[s];
               const sqStyle = stalledRow
@@ -8077,12 +8199,12 @@ function DetailSheet({
                     border: `1px solid ${C.clay}`,
                     backgroundColor: 'transparent',
                   }
-                : dead && i > 1
+                : consumedDead && i > 1
                   ? {
                       border: `1px solid ${C.line}`,
                       backgroundColor: 'transparent',
                     }
-                  : dead && i === 0
+                  : consumedDead && i === 0
                     ? { border: `1px solid ${C.clay}`, backgroundColor: C.clay }
                     : reached && refunded
                       ? {
@@ -8161,7 +8283,7 @@ function DetailSheet({
           </div>
         </div>
 
-        {dead ? (
+        {consumedDead ? (
           <>
             <p
               className="mt-6"
@@ -8183,6 +8305,20 @@ function DetailSheet({
               {t.packNoteShort}
             </p>
           </>
+        ) : expiredDead ? (
+          <p
+            className="mt-6"
+            style={{
+              backgroundColor: C.soft,
+              borderLeft: `3px solid ${C.clay}`,
+              color: C.clayInk,
+              fontSize: '13px',
+              lineHeight: 2,
+              padding: '14px',
+            }}
+          >
+            {t.expired}
+          </p>
         ) : refunded ? (
           <p
             className="mt-6"
