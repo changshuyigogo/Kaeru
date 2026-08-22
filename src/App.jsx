@@ -223,6 +223,14 @@ function inferRefundMethod(initial) {
   return STAGES.indexOf(initial.status) === 1 ? 'registered' : 'unsure';
 }
 
+// 行程 id 原本只用 `t_${Date.now()}`，跟收據 id（`r_${Date.now()}_隨機
+// 碼`）不是同一套規格——快速連續建立兩趟行程（例如快點兩下「建立」）
+// 理論上可能撞出同一個毫秒、產生兩筆一樣的 id，其中一筆會變成看不到
+// 也刪不掉的幽靈行程。補上跟收據 id 同一套隨機碼。
+function genTripId() {
+  return `t_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
 // 日本有國際定期航線的機場約 34 座，只放這些，不追求完整——找不到就選
 // 「其他機場」，用預設 3 小時。region 是地區 key（對應 AIRPORT_REGIONS），
 // city 是機場所在城市，hours 是建議提早幾小時（給總覽倒數區跟回程當天
@@ -1823,7 +1831,14 @@ function parseReceiptOCR(text) {
   let m;
   while ((m = pctRe.exec(norm))) {
     const amt = Number(m[2].replace(/,/g, ''));
-    if (amt > 0) found[m[1]] = amt;
+    // 同一個稅率只認第一筆比對到的，後面重複的不要蓋掉。日本收據常見
+    // 格式是「10%對象 1,000円」後面接一行「（內消費稅等 100円）」——
+    // 後面那行也符合這個規則（"對象" 跟數字之間允許到 12 個非數字字
+    // 元，"內消費稅等　" 剛好塞得進去），如果用蓋掉的方式，含稅小計
+    // 會被內消費稅那個小數字取代，金額直接少一個位數；用累加的話反而
+    // 會把稅額誤加回小計，一樣是錯的。第一筆抓到的通常就是真正的小計
+    // 金額，後面重複比對到的不管，才是兩種收據格式都對的做法。
+    if (amt > 0 && !(m[1] in found)) found[m[1]] = amt;
   }
   const rates = Object.keys(found);
   if (rates.length === 0) return null;
@@ -2406,7 +2421,7 @@ export default function App() {
           let active = parsed.activeId || null;
 
           if (!tripList.length) {
-            const id = `t_${Date.now()}`;
+            const id = genTripId();
             tripList = [
               { id, name: '', departure: savedSettings.departure || '' },
             ];
@@ -2449,7 +2464,7 @@ export default function App() {
 
   useEffect(() => {
     if (!loaded || trips.length) return;
-    const id = `t_${Date.now()}`;
+    const id = genTripId();
     setTrips([{ id, name: '', departure: '' }]);
     setActiveId(id);
   }, [loaded, trips.length]);
@@ -3091,7 +3106,7 @@ export default function App() {
             setTripSheet(false);
           }}
           onCreate={(name, departure) => {
-            const id = `t_${Date.now()}`;
+            const id = genTripId();
             setTrips((prev) => [...prev, { id, name, departure }]);
             setActiveId(id);
             setTripSheet(false);
@@ -3200,6 +3215,7 @@ export default function App() {
           trip={trips.find((x) => x.id === editingTripId)}
           isActive={editingTripId === activeId}
           tripStats={tripStatsFor(editingTripId)}
+          tripCount={trips.length}
           onClose={() => setEditingTripId(null)}
           onSave={(patch, makeActive) => {
             setTrips((prev) =>
@@ -4933,6 +4949,12 @@ function FaqView({ t, lang, onStart }) {
 function useCountUp(target, ms = 500) {
   const [n, setN] = useState(target);
   const from = useRef(target);
+  // 追蹤「畫面上現在顯示的數字」，不只是動畫跑完才更新的 from.current
+  // ——動畫還沒跑完 target 又變了（例如很快連續答完兩題）時，effect
+  // 會被提早清掉，這時要接著目前畫面上的數字繼續跑，不能回去用這次
+  // 動畫開始前的舊起點，不然數字會先跳回很久以前的值再重新跑，看起來
+  // 像卡了一下。
+  const lastShown = useRef(target);
   useEffect(() => {
     const start = performance.now();
     const a = from.current;
@@ -4942,12 +4964,17 @@ function useCountUp(target, ms = 500) {
     const tick = (now) => {
       const p = Math.min(1, (now - start) / ms);
       const e = 1 - Math.pow(1 - p, 3);
-      setN(Math.round(a + (b - a) * e));
+      const value = Math.round(a + (b - a) * e);
+      lastShown.current = value;
+      setN(value);
       if (p < 1) raf = requestAnimationFrame(tick);
       else from.current = b;
     };
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      from.current = lastShown.current;
+    };
   }, [target, ms]);
   return n;
 }
@@ -5970,6 +5997,7 @@ function TripEditSheet({
   trip,
   isActive,
   tripStats,
+  tripCount,
   onClose,
   onSave,
   onDelete,
@@ -6132,7 +6160,11 @@ function TripEditSheet({
           </div>
 
           <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: '18px' }}>
-            {confirmDelete ? (
+            {/* 跟 TripSheet 的刪除保護一樣：只剩一個行程時，這裡完全不
+                顯示刪除入口——不然從設定頁或首頁空狀態的「編輯行程」CTA
+                進來，可以把唯一的行程刪掉，事後 app 會自己生一個空白
+                行程頂替，使用者毫無預警。 */}
+            {tripCount > 1 && (confirmDelete ? (
               <div style={{ backgroundColor: C.soft, borderLeft: `3px solid ${C.clay}`, padding: '12px 14px' }}>
                 <p style={{ color: C.clayInk, fontSize: '12.5px', lineHeight: 1.7 }}>
                   {t.deleteTripWarning(tripStats.count)}
@@ -6174,7 +6206,7 @@ function TripEditSheet({
                   {t.tripDelete}
                 </button>
               </>
-            )}
+            ))}
           </div>
         </div>
       </FullScreenSheet>
@@ -7680,6 +7712,14 @@ function PhotoConfirmSheet({ t, src, fromScan, onRetake, onUse, onClose }) {
 
   function buildOutput() {
     const img = imgRef.current;
+    // 圖片還沒真的載入完成（naturalWidth/Height 是 0）就硬算，四個角點會
+    // 全部變成 (0,0)，裁切算出來的寬高會被 Math.max(1, ...) 夾成 1×1，
+    // 不會拋錯，卻會存出一張看起來正常存檔成功、實際上是空白的垂圾
+    // 照片。這裡先擋掉，讓下面呼叫端的 catch 退回用原圖，不要讓這種
+    // 半成品悄悄存進收據裡。
+    if (!img || !img.naturalWidth || !img.naturalHeight) {
+      throw new Error('image not ready');
+    }
     const natCorners = corners.map((f) => ({
       x: f.x * img.naturalWidth,
       y: f.y * img.naturalHeight,
@@ -7688,6 +7728,14 @@ function PhotoConfirmSheet({ t, src, fromScan, onRetake, onUse, onClose }) {
     const [TL, TR, BR, BL] = natCorners;
     let w = Math.round((dist(TL, TR) + dist(BL, BR)) / 2);
     let h = Math.round((dist(TL, BL) + dist(TR, BR)) / 2);
+    // 四個裁切把手各自獨立拖曳、沒有互相檔位限制，使用者可能把它們拖成
+    // 幾乎共線或交叉的畸形四邊形——這種情況下 w/h 會逼近 0，裁切結果是
+    // 一張看不出內容的黑色/透明小圖，一樣不拋錯。20px 是任何真的收據
+    // 照片不可能小到的門檻，低於這個數字直接當作裁切失敗，退回用原圖，
+    // 好過存一張看不出東西的照片。
+    if (w < 20 || h < 20) {
+      throw new Error('crop area too small');
+    }
     const scale = Math.min(1, 1000 / Math.max(w, h, 1));
     w = Math.max(1, Math.round(w * scale));
     h = Math.max(1, Math.round(h * scale));
@@ -7973,9 +8021,19 @@ function DetailSheet({
   useBackClose(lightboxIndex !== null, () => setLightboxIndex(null));
   const cap = usePhotoCapture({ imgs: photos, setImgs: (updater) => onPhotosChange(typeof updater === 'function' ? updater(photos) : updater) });
 
+  // 拖曳排序的 pointermove/up 是一次性註冊到 window 上、整段手勢都不會
+  // 重新註冊的 closure，如果直接讀 photos 這個 prop，抓到的永遠是「手指
+  // 按下那一刻」的舊陣列——連續跨兩格以上拖曳時，第二次 movePhoto 還是
+  // 從最原始的陣列切，不會疊加第一次的結果，排序會兜不起來；如果拖曳
+  // 期間剛好有別的地方（例如同時刪除一張照片）改了 photos，這裡寫回去
+  // 的舊陣列還會把那次刪除蓋掉，等於使用者以為刪掉的照片自己跑回來。
+  // 用一個每次 render 都同步更新的 ref，movePhoto 永遠讀最新的陣列。
+  const photosRef = useRef(photos);
+  photosRef.current = photos;
+
   function movePhoto(from, to) {
     if (from === to) return;
-    const next = [...photos];
+    const next = [...photosRef.current];
     const [moved] = next.splice(from, 1);
     next.splice(to, 0, moved);
     onPhotosChange(next);
@@ -7995,7 +8053,10 @@ function DetailSheet({
         const dx = p.clientX - startX;
         setDragState({ from: i, dx });
         const shift = Math.round(dx / THUMB_STEP);
-        const target = Math.max(0, Math.min(photos.length - 1, i + shift));
+        const target = Math.max(
+          0,
+          Math.min(photosRef.current.length - 1, i + shift),
+        );
         if (target !== current) {
           movePhoto(current, target);
           current = target;
