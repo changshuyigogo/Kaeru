@@ -1907,14 +1907,15 @@ function parseReceiptOCR(text) {
     // 的總額標籤+金額，當作含稅總額，稅率不知道所以先預設 10%（較常
     // 見），存進表單後使用者自己確認調整；「合計」要排除掉「合計点數」
     // 這種列商品件數、不是列金額的行，不然會把件數誤當金額抓進來。
-    // 兩種格式都找不到才真的放棄，回傳 null。
+    // 這兩種格式都找不到，金額就先不填，但不要整個放棄——店名跟日期
+    // 是完全獨立的規則，不需要靠金額才能抓，下面繼續往下走。
     const totalRe = /(?:合計(?!點數|点数)|お会計|ご請求金額|總額|総額)[^\d]{0,8}([\d,]{2,9})\s*円?/;
     const totalMatch = norm.match(totalRe);
-    if (!totalMatch) return null;
-    const amt = Number(totalMatch[1].replace(/,/g, ''));
-    if (amt <= 0) return null;
-    result.rate = 10;
-    result.incl = amt;
+    const amt = totalMatch ? Number(totalMatch[1].replace(/,/g, '')) : 0;
+    if (amt > 0) {
+      result.rate = 10;
+      result.incl = amt;
+    }
   }
 
   const lines = norm
@@ -1929,6 +1930,13 @@ function parseReceiptOCR(text) {
     result.date = `${dm[1]}-${String(dm[2]).padStart(2, '0')}-${String(dm[3]).padStart(2, '0')}`;
   }
 
+  // 金額、店名、日期三個一個都沒抓到，這次辨識才算真的沒有用——回傳
+  // null 讓呼叫端知道「讀不到」跟「有讀到、只是要手動補齊」是不同的
+  // 兩件事。只要有抓到其中一項，就把抓到的部分帶回去，不要因為金額
+  // 沒抓到就連店名/日期一起浪費掉。
+  if (!result.incl && !result.incl8 && !result.incl10 && !result.shop && !result.date) {
+    return null;
+  }
   return result;
 }
 
